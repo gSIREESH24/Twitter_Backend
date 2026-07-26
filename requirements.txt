@@ -1,0 +1,23 @@
+express. Web Framework
+cors. Cross-Origin Resource Sharing
+helmet. Security Middleware
+compression. Compresses HTTP responses
+morgan. HTTP Request Logger
+dotenv. Environment Variable Management
+@prisma/client. ORM (Object-Relational Mapper)
+jsonwebtoken. Authentication
+zod.  Validation
+pino
+pino-http. Logger
+
+#Development Dependencies
+typescipt
+ts-node 
+ts-node-dev 
+@types/node 
+@types/express 
+@types/cors 
+@types/jsonwebtoken 
+@types/bcrypt 
+prisma
+
