@@ -1,116 +1,81 @@
-# 🚀 Twitter Backend Architecture & System Design
+# 🐦 Twitter Backend – High-Level System Design & Architecture
 
-> **A professional, enterprise-grade system design and software architecture blueprint for building a scalable Twitter-like backend service capable of supporting millions of daily active users.**
-
----
-
-## 📌 Project Overview
-
-Most backend tutorials jump directly from a basic idea to writing code without any architectural planning. This repository demonstrates the **professional software engineering lifecycle**: designing the requirements, high-level system architecture, database schema, API contracts, low-level software layers, and security systems **before** writing a single line of production code.
-
-We follow an evolutionary development strategy: starting as a cleanly organized **Modular Monolith** with clear domain boundaries, and incrementally introducing caching (**Redis**), event streaming (**Kafka**), containerization (**Docker**), observability, and eventually decomposing into **Microservices** when scale demands it.
+> **A clean, easy-to-understand architecture guide for building a scalable Twitter-like backend from scratch.**
 
 ---
 
-## 🏛️ Overall System Architecture
+## 🎯 What is this Project?
+
+Most backend tutorials jump straight into writing code without explaining **why** things are built a certain way. 
+
+Professional software engineers don't do that. They first create a **High-Level Blueprint (System Design)** so everyone on the team understands:
+* How millions of users will connect to the server without crashing it.
+* How databases, caches, and message queues work together.
+* Where code belongs so the project stays clean and easy to maintain.
+
+Think of this documentation as the **blueprint for constructing a skyscraper**. We design the foundation, the plumbing, and the electrical grids before pouring the first drop of concrete!
+
+---
+
+## 🏛️ The High-Level Architecture (At a Glance)
+
+How does a request travel from a user's phone to our database? Here is the simple end-to-end journey:
 
 ```
-                                  +-------------------+
-                                  |    Web / Mobile   |
-                                  |      Clients      |
-                                  +---------+---------+
-                                            |
-                                   HTTPS / REST API
-                                            |
-                                            v
-                                  +-------------------+
-                                  |   Load Balancer   |
-                                  +---------+---------+
-                                            |
-                                            v
-                                  +-------------------+
-                                  |    API Gateway    |
-                                  +---------+---------+
-                                            |
-                 +--------------------------+--------------------------+
-                 | (Authentication & Validation Middleware Pipeline)   |
-                 +--------------------------+--------------------------+
-                                            |
-                                            v
-                              +---------------------------+
-                              |   Modular Monolith Core   |
-                              |  (Layered Architecture)   |
-                              +-------------+-------------+
-                                            |
-            +-------------------------------+-------------------------------+
-            |                               |                               |
-            v                               v                               v
- +---------------------+         +---------------------+         +---------------------+
- |     PostgreSQL      |         |     Redis Cache     |         |     Kafka Cluster   |
- |  (Primary Database) |         | (Sessions & Feeds)  |         |  (Event Streaming)  |
- +---------------------+         +---------------------+         +----------+----------+
-                                                                            |
-                                                                  +---------+---------+
-                                                                  |                   |
-                                                                  v                   v
-                                                      +-------------------+ +-------------------+
-                                                      | Notification Svc  | | Analytics Workers |
-                                                      +-------------------+ +-------------------+
+    [ 📱 User Phone / Web App ]
+                 │
+                 │ (1. HTTPS Request: "Create Tweet")
+                 ▼
+     [ ⚖️ Nginx Load Balancer ]    ──► Distributes traffic so no single server gets overloaded.
+                 │
+                 ▼
+       [ 🌐 Express API Gateway ]  ──► Checks: "Is this user logged in? Is the data valid?"
+                 │
+                 ▼
+    ┌─────────────────────────┐
+    │  Modular Monolith Core  │    ──► The Brain: Handles Users, Tweets, Feeds, and Follows.
+    └────┬───────────┬────────┘
+         │           │
+         │           └──────────────────────────────┐
+         ▼                                          ▼
+ [ 🐘 PostgreSQL DB ]                       [ ⚡ Redis Cache ]
+  Stores permanent data                      Stores hot home feeds & sessions
+  (Users, Tweets, Likes)                     for instant (<5ms) loading.
+         │
+         │ (2. Background Event: "Tweet Created")
+         ▼
+ [ 📬 Apache Kafka Bus ]   ──► Asynchronously tells background workers to push notifications
+                               and update followers' timelines without slowing down the app!
 ```
 
 ---
 
-## 📚 Documentation Index
+## 📚 Easy-to-Read Documentation Guides
 
-Our system design documentation is organized into modular, sequential chapters. Each chapter builds upon the previous one without repetition:
+We have broken down the entire system design into **9 simple, bite-sized chapters**. No confusing jargon, no massive code dumps—just clear concepts, diagrams, and best practices!
 
-| Chapter | Document | Description |
+| Chapter | Guide Title | What You Will Learn |
 | :--- | :--- | :--- |
-| **00** | [**Master System Design Blueprint**](./SYSTEM_DESIGN.md) | The executive summary and master reference tying together all architectural layers. |
-| **01** | [**Problem Statement & Scope**](./docs/01-problem-statement-and-scope.md) | Objective, core functional scope for Version 1, and future out-of-scope features. |
-| **02** | [**Requirement Analysis & Scale Estimation**](./docs/02-requirement-analysis-and-scale.md) | Functional/Non-functional requirements, SLA definitions, and DAU/QPS/Storage capacity math. |
-| **03** | [**High-Level Architecture (HLA)**](./docs/03-high-level-architecture.md) | Component interaction, load balancing, API Gateway, Redis, Kafka, and stateless design principles. |
-| **04** | [**Domain Modeling**](./docs/04-domain-modeling.md) | Core domain entities (`User`, `Tweet`, `Follow`, `Like`, `Comment`, `Notification`, `Media`) and ER definitions. |
-| **05** | [**Database Design & SQL Schema**](./docs/05-database-design.md) | PostgreSQL table DDLs, indexing strategy, foreign/composite keys, and query performance optimization. |
-| **06** | [**API Contracts & REST Specifications**](./docs/06-api-design.md) | RESTful URL naming, HTTP methods, status codes, JSON request/response payloads, and cursor pagination. |
-| **07** | [**Low-Level Design (LLD)**](./docs/07-low-level-design.md) | Layered architecture (Router $\rightarrow$ Controller $\rightarrow$ Service $\rightarrow$ Repository), feature folder structure, and SOLID rules. |
-| **08** | [**Authentication & Security System**](./docs/08-authentication-system.md) | Password hashing (Argon2/bcrypt), JWT Access/Refresh token flows, middleware pipelines, and sequence diagrams. |
-| **09** | [**Development & Scaling Strategy**](./docs/09-development-and-scaling-strategy.md) | The 6-stage evolutionary roadmap from modular monolith to high-scale microservices. |
+| **00** | [**Master System Blueprint**](./SYSTEM_DESIGN.md) | A complete overview of the system architecture, data flow, and layers. |
+| **01** | [**Problem Statement & Scope**](./docs/01-problem-statement-and-scope.md) | What features we are building (Tweets, Feeds, Follows, Likes) and what we leave out for later. |
+| **02** | [**Requirements & Scale Math**](./docs/02-requirement-analysis-and-scale.md) | How to calculate traffic, database storage, and memory needed for 1 Million Daily Active Users. |
+| **03** | [**High-Level Architecture (HLA)**](./docs/03-high-level-architecture.md) | How Load Balancers, Express Servers, PostgreSQL, Redis, and Kafka work together. |
+| **04** | [**Domain Modeling**](./docs/04-domain-modeling.md) | How the core entities (`User`, `Tweet`, `Follow`, `Like`, `Comment`, `Notification`) relate to each other. |
+| **05** | [**Database Design**](./docs/05-database-design.md) | High-level table structures, why we index columns, and how we count likes without slowing down the DB. |
+| **06** | [**API Design & REST Specs**](./docs/06-api-design.md) | How to name API endpoints cleanly and why **Cursor Pagination** is better than Offset Pagination for feeds. |
+| **07** | [**Software Layers (LLD)**](./docs/07-low-level-design.md) | Why we separate code into `Router -> Controller -> Service -> Repository` so every layer has ONE job. |
+| **08** | [**Authentication System**](./docs/08-authentication-system.md) | How secure login works using hashed passwords, short-lived Access Tokens, and secure Refresh Tokens. |
+| **09** | [**Development Roadmap**](./docs/09-development-and-scaling-strategy.md) | Our step-by-step plan: start simple as a clean monolith, add Redis/Kafka, and scale to microservices later. |
 
 ---
 
-## 🛠️ Technology Stack
+## 💡 Why Our Design Works
 
-### Core Runtime & Language
-- **Node.js**: Event-driven, non-blocking I/O runtime for high-concurrency API handling.
-- **TypeScript**: Static typing for domain safety, DTO validation, and maintainable enterprise codebases.
-- **Express.js**: Fast, minimalist web framework for routing and middleware pipelines.
-
-### Data & Infrastructure
-- **PostgreSQL**: Primary relational database ensuring ACID compliance, transactional integrity, and relational data modeling.
-- **Redis**: In-memory data store used for session storage, rate limiting, and home feed caching (Fan-out on write).
-- **Apache Kafka**: Distributed event streaming platform for asynchronous background processing (notifications, analytics, feeds).
-- **AWS S3 / Cloud Storage**: Object storage for user profile pictures and tweet multimedia files.
-
-### Security & Quality
-- **JSON Web Tokens (JWT)**: Stateless, cryptographically signed access and refresh tokens.
-- **Argon2 / bcrypt**: Industry-standard cryptographic algorithms for secure password hashing.
-- **Zod / Joi**: Runtime schema validation for incoming request bodies, queries, and headers.
-- **Winston / Morgan**: Structured JSON logging and HTTP request tracing.
+1. **Simple to Understand**: Built with clean, feature-based folders (`/user`, `/tweet`, `/feed`) so everything related to a feature stays together.
+2. **Fast & Reliable**: By caching feeds in **Redis** and sending heavy background tasks to **Kafka**, our API responds in less than 50 milliseconds!
+3. **Easy to Scale**: Our API servers are **stateless** (they don't store local session data), meaning we can add 10 or 100 new server instances anytime traffic spikes!
 
 ---
 
-## 🎯 Engineering Philosophy
-
-1. **Think Before Coding**: A well-designed schema and clear API contract prevent 90% of technical debt and refactoring.
-2. **Strict Separation of Concerns**: Controllers handle HTTP; Services handle business rules; Repositories handle SQL. Never mix them.
-3. **Stateless Scalability**: Application servers must remain stateless so any request can be routed to any server instance.
-4. **Evolutionary Architecture**: Don't build microservices on Day 1. Build a clean modular monolith that can be split into microservices without rewriting business logic.
-
----
-
-## 🏁 Getting Started
-
-To explore the architecture, start by reading the [**Master System Design Blueprint (`SYSTEM_DESIGN.md`)**](./SYSTEM_DESIGN.md), then follow the sequential chapters in the [`docs/`](./docs/) directory.
-
-Once the design review is complete, proceed to **Phase 10 (Project Setup)** to begin implementation!
+## 🚀 What's Next?
+Start by reading the [**Master System Blueprint (`SYSTEM_DESIGN.md`)**](./SYSTEM_DESIGN.md) to see the big picture, then explore the individual chapters in the `docs/` folder!

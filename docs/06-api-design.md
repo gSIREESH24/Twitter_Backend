@@ -1,217 +1,94 @@
 # Chapter 6. API Design & REST Specifications
 
-> **Objective**: Define clean, RESTful HTTP contracts, establish standard URL naming conventions, define exact JSON Request/Response Data Transfer Object (DTO) schemas, specify appropriate HTTP status codes, and detail our cursor-based pagination architecture.
+> **How do mobile apps talk to our server?** A high-level guide to RESTful URL naming, HTTP status codes, clean JSON responses, and why **Cursor Pagination** makes scrolling infinitely smoother!
 
 ---
 
-## 6.1 RESTful API Design Principles
+## 1. What is a RESTful API?
 
-Our API layer strictly adheres to Level 2 of the Richardson Maturity Model for RESTful web services:
-1.  **Resource-Oriented URLs**: Endpoints represent domain nouns (`/users`, `/tweets`), never action verbs (`/createTweet`, `/getUsers`).
-2.  **HTTP Method Semantics**:
-    *   `GET`: Retrieve resources (Idempotent, safe, cacheable).
-    *   `POST`: Create new resources or execute non-idempotent actions.
-    *   `PATCH`: Partially update existing resource attributes.
-    *   `DELETE`: Remove resources.
-3.  **API Versioning**: All endpoints are prefixed with `/api/v1/` to ensure backwards compatibility when introducing future breaking schema changes.
+When your mobile phone app wants to load tweets or publish a post, it sends an HTTP message over the internet to our backend. We design these endpoints using **RESTful Principles**:
 
----
-
-## 6.2 Standard HTTP Status Code Mapping
-
-Every API response returns an appropriate HTTP status code clearly communicating the execution result:
-
-| Status Code | Name | Usage Scenario in Twitter Backend |
-| :--- | :--- | :--- |
-| **`200 OK`** | OK | Successful `GET` retrieval, login, or profile modification. |
-| **`201 Created`**| Created | Successful creation of a Tweet, Account, or Comment. |
-| **`204 No Content`**| No Content| Successful deletion of a Tweet or Unfollowing an account. |
-| **`400 Bad Request`**| Bad Request| Zod schema validation failure (e.g., tweet content $> 280$ chars). |
-| **`401 Unauthorized`**| Unauthorized| Missing, expired, or invalid JWT Bearer Authorization header. |
-| **`403 Forbidden`** | Forbidden | User attempting to delete a tweet authored by someone else. |
-| **`404 Not Found`** | Not Found | Requested Tweet ID or Username does not exist in database. |
-| **`409 Conflict`** | Conflict | User attempting to sign up with an already registered email/username. |
-| **`500 Internal Error`**| Server Error| Unhandled database exception or infrastructure failure. |
+1. **Use Nouns, Not Verbs**: URLs represent resources (`/users`, `/tweets`), not actions (`/createTweet` is bad!).
+2. **Use Standard HTTP Methods**:
+   * `GET`: Fetch data (Safe, read-only).
+   * `POST`: Create new data (Publishing a tweet or logging in).
+   * `DELETE`: Remove data (Unfollowing or deleting a post).
+3. **API Versioning**: All URLs start with `/api/v1/` so we can upgrade our features later without breaking older mobile app versions!
 
 ---
 
-## 6.3 Standard JSON Response Wrapper
+## 2. Standard HTTP Status Codes (The Server's Reply)
 
-To provide a predictable contract for frontend and mobile clients, all API responses (success or failure) are wrapped in a standardized JSON envelope:
+Every time our server replies to an app, it attaches a 3-digit number telling the app exactly what happened:
 
-### Success Response Envelope
+| Status Code | Meaning | When Do We Use It? |
+| :---: | :--- | :--- |
+| **`200 OK`** | Success | You successfully fetched a profile or logged in. |
+| **`201 Created`**| Successfully Created | You successfully published a new tweet or signed up! |
+| **`204 No Content`**| Successfully Deleted | You deleted a tweet or unfollowed an account. |
+| **`400 Bad Request`**| Invalid Input | Your tweet was over 280 characters or your email was malformed. |
+| **`401 Unauthorized`**| Login Required | You tried to post a tweet without a valid login badge (JWT). |
+| **`403 Forbidden`** | Permission Denied | You tried to delete a tweet that belongs to someone else! |
+| **`404 Not Found`** | Doesn't Exist | You searched for a username or tweet ID that is not in our database. |
+
+---
+
+## 3. Clean JSON Response Examples
+
+To make life easy for frontend and mobile app developers, every response from our server comes wrapped in a clean, predictable JSON package.
+
+### ✅ Successful Response Example (Posting a Tweet)
+When you publish a tweet at `POST /api/v1/tweets`, the server replies:
 ```json
 {
   "success": true,
-  "data": { ... },
-  "meta": {
-    "timestamp": "2026-07-26T15:30:00.000Z",
-    "pagination": {
-      "nextCursor": "2026-07-26T14:22:10.123Z",
-      "limit": 20
-    }
+  "data": {
+    "id": "991c262e-041c-11e1-9234-0123456789cc",
+    "content": "Designing a scalable Twitter backend from scratch! 🚀 #SystemDesign",
+    "likesCount": 0,
+    "commentsCount": 0,
+    "author": {
+      "username": "sireesh_dev",
+      "avatarUrl": "https://s3.amazonaws.com/twitter-media/avatar.jpg"
+    },
+    "createdAt": "2026-07-26T15:35:00Z"
   }
 }
 ```
 
-### Error Response Envelope
+### ❌ Error Response Example (Tweet Too Long)
+If your tweet exceeds 280 characters, the server politely rejects it:
 ```json
 {
   "success": false,
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "Tweet content cannot exceed 280 characters.",
-    "details": [
-      {
-        "field": "content",
-        "issue": "String must contain at most 280 character(s)"
-      }
-    ]
-  },
-  "meta": {
-    "timestamp": "2026-07-26T15:30:00.000Z",
-    "path": "/api/v1/tweets"
+    "message": "Tweet content cannot exceed 280 characters."
   }
 }
 ```
 
 ---
 
-## 6.4 Core API Endpoint Specifications
+## 4. Why Cursor Pagination is Better Than Page Numbers
 
-### 1. Authentication Endpoints
+When you scroll through a Twitter feed, we cannot send you all 5 million tweets at once—your phone would crash! Instead, we send tweets in chunks of 20. This is called **Pagination**.
 
-#### `POST /api/v1/auth/signup`
-Creates a new user account and returns JWT credentials.
-*   **Access**: Public
-*   **Request Body**:
-    ```json
-    {
-      "username": "sireesh_dev",
-      "email": "sireesh@gmail.com",
-      "password": "SecurePassword123!"
-    }
-    ```
-*   **Response (`201 Created`)**:
-    ```json
-    {
-      "success": true,
-      "data": {
-        "user": {
-          "id": "710b962e-041c-11e1-9234-0123456789ab",
-          "username": "sireesh_dev",
-          "email": "sireesh@gmail.com"
-        },
-        "tokens": {
-          "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-          "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
-        }
-      }
-    }
-    ```
+### ❌ The Old Way: Offset Pagination (Page Numbers)
+In old websites, you see buttons for `Page 1`, `Page 2`, `Page 3`. Behind the scenes, the server tells the database: *"Skip the first 10,000 tweets and grab the next 20"* (`OFFSET 10000 LIMIT 20`).
 
-#### `POST /api/v1/auth/login`
-Authenticates existing user credentials.
-*   **Access**: Public
-*   **Request Body**:
-    ```json
-    {
-      "email": "sireesh@gmail.com",
-      "password": "SecurePassword123!"
-    }
-    ```
-*   **Response (`200 OK`)**: Returns identical token DTO payload as signup.
+**Why this fails for social media**:
+1. **Slow Performance**: To skip 10,000 tweets, the database has to read all 10,000 from disk and throw them away! As you scroll deeper, loading gets slower and slower.
+2. **Duplicate Tweets**: While you are reading Page 1, 5 new tweets are posted at the top of the timeline. When you scroll down to Page 2, everything has shifted down by 5 spots—meaning **you will see 5 duplicate tweets from Page 1!**
 
 ---
 
-### 2. Tweet Endpoints
+### ✅ The Modern Way: Cursor-Based Pagination (Timestamps)
+Instead of counting page numbers, we give your phone a bookmark called a **Cursor** (usually the exact timestamp of the very last tweet on your screen).
 
-#### `POST /api/v1/tweets`
-Publishes a new tweet with optional media attachments.
-*   **Access**: Protected (Requires `Authorization: Bearer <token>`)
-*   **Request Body**:
-    ```json
-    {
-      "content": "Designing a scalable Twitter backend from scratch using Node.js, TypeScript, PostgreSQL, and Kafka! 🚀 #SystemDesign",
-      "mediaUrls": [
-        "https://s3.amazonaws.com/twitter-media/img_101.jpg"
-      ]
-    }
-    ```
-*   **Response (`201 Created`)**:
-    ```json
-    {
-      "success": true,
-      "data": {
-        "id": "991c262e-041c-11e1-9234-0123456789cc",
-        "userId": "710b962e-041c-11e1-9234-0123456789ab",
-        "content": "Designing a scalable Twitter backend from scratch using Node.js, TypeScript, PostgreSQL, and Kafka! 🚀 #SystemDesign",
-        "likesCount": 0,
-        "commentsCount": 0,
-        "media": [
-          {
-            "id": "111c262e-041c-11e1-9234-0123456789dd",
-            "url": "https://s3.amazonaws.com/twitter-media/img_101.jpg"
-          }
-        ],
-        "createdAt": "2026-07-26T15:35:00.000Z"
-      }
-    }
-    ```
+When you scroll to the bottom, your app asks:
+> *"Hey server, give me 20 tweets that were created **older than** `2026-07-26 15:20:00`!"*
 
-#### `DELETE /api/v1/tweets/:id`
-Deletes a published tweet. Enforces ownership check (only the author can delete).
-*   **Access**: Protected (Bearer JWT)
-*   **Response (`204 No Content`)**: Empty response body.
-
----
-
-### 3. Social & Follow Endpoints
-
-#### `POST /api/v1/users/:targetUserId/follow`
-Subscribes the authenticated user to the target user account.
-*   **Access**: Protected (Bearer JWT)
-*   **Response (`200 OK`)**:
-    ```json
-    {
-      "success": true,
-      "data": {
-        "followerId": "710b962e-041c-11e1-9234-0123456789ab",
-        "followingId": "882c262e-041c-11e1-9234-0123456789ff",
-        "status": "FOLLOWED"
-      }
-    }
-    ```
-
----
-
-## 6.5 Pagination Architecture: Why Cursor > Offset
-
-When retrieving timelines (`GET /api/v1/feed/home`), beginners almost always use traditional **Offset-based Pagination**:
-```sql
--- BAD: Traditional Offset Pagination
-SELECT * FROM tweets ORDER BY created_at DESC LIMIT 20 OFFSET 10000;
-```
-
-### Why Offset Pagination Fails at Scale
-1.  **Catastrophic Database Performance**: To execute `OFFSET 10000 LIMIT 20`, PostgreSQL must read, sort, and count 10,020 rows from disk, only to discard the first 10,000! As the user scrolls deeper into a timeline, query latency grows linearly from $5\text{ms}$ to $500\text{ms}+$.
-2.  **Duplicate or Missed Tweets (The Real-Time Drift Problem)**: While a user is reading Page 1, 5 new tweets are published at the top of the feed. When the user requests Page 2 (`OFFSET 20`), the entire database dataset has shifted down by 5 rows. The user will see 5 duplicate tweets from Page 1!
-
-### The Solution: Cursor-Based Pagination
-Instead of counting row offsets, we pass a pointer (**Cursor**) representing the timestamp or ID of the very last item seen on the previous page:
-
-#### Cursor API Request
-```http
-GET /api/v1/feed/home?limit=20&cursor=2026-07-26T15:20:00.000Z
-```
-
-#### Underlying Optimized SQL Query
-```sql
--- GOOD: Cursor Pagination using Index Lookup
-SELECT * FROM tweets 
-WHERE created_at < '2026-07-26T15:20:00.000Z' 
-ORDER BY created_at DESC 
-LIMIT 20;
-```
-
-> 💡 **Architectural Takeaway**: Because `created_at` is indexed via our composite B-Tree index, PostgreSQL jumps directly to index node `2026-07-26T15:20:00.000Z` and scans exactly 20 leaf nodes. **Query execution remains a constant $\approx 2\text{ms}$ regardless of whether fetching page 1 or page 1,000**, with zero risk of duplicate items during real-time feed updates!
+**Why Cursor Pagination is awesome**:
+1. **Instant Speed**: Because our timestamps are indexed, the database jumps directly to that exact second and grabs 20 tweets in **2 milliseconds**—whether you are on scroll 1 or scroll 1,000!
+2. **Zero Duplicates**: Even if 100 new tweets arrive at the top of the feed while you are scrolling, your bookmark stays fixed to your timestamp, so your timeline scroll remains super smooth and glitch-free!

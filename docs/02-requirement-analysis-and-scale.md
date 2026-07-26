@@ -1,127 +1,92 @@
-# Chapter 2. Requirement Analysis & Scale Estimation
+# Chapter 2. Requirements & Scale Math
 
-> **Objective**: Define concrete functional and non-functional requirements, establish strict Service Level Agreements (SLAs), and perform mathematical scale estimations for traffic, storage, and bandwidth to size our database and caching infrastructure.
-
----
-
-## 2.1 Functional Requirements
-
-Functional requirements define what the system *must do* from an end-user perspective:
-
-1.  **Account Security**: Users must be able to sign up with a unique email and username, authenticate securely, and receive stateless access tokens.
-2.  **Tweet Publishing**: Authenticated users must be able to post text tweets ($\le 280$ characters) with up to 4 attached images.
-3.  **Social Graph**: Users must be able to follow and unfollow other users, establishing unidirectional relationships.
-4.  **Timeline Generation**: Users must be presented with a personalized home feed showing tweets from accounts they follow, ordered chronologically.
-5.  **Engagement**: Users must be able to like, unlike, and comment on tweets.
-6.  **Notifications**: Users must receive notifications when someone interacts with their tweets or follows their account.
-7.  **Search**: Users must be able to query the system for profiles and tweets matching specific text strings.
+> **How big is our system?** A simple guide to our performance goals and how we calculate the servers, storage, and memory needed for 1 Million Daily Active Users.
 
 ---
 
-## 2.2 Non-Functional Requirements (SLAs & Engineering Goals)
+## 1. What Must the System Do? (Functional Requirements)
 
-Non-functional requirements define *how well* the system must perform under load:
+From a user's point of view, our system must guarantee that:
+* Users can sign up, log in, and view profiles securely.
+* Users can publish tweets with photos, like, comment, and follow others.
+* When a user opens their app, their home feed loads instantly with the latest tweets from accounts they follow.
+* Notifications arrive reliably whenever an interaction happens.
 
-| Metric / Goal | Target Requirement | Engineering Strategy |
+---
+
+## 2. How Well Must It Perform? (Non-Functional Requirements)
+
+Behind the scenes, architects define **Service Level Agreements (SLAs)**—promises of how reliable and fast the system will be under heavy traffic:
+
+| Performance Goal | Our Target SLA | How We Achieve It (High-Level Strategy) |
 | :--- | :--- | :--- |
-| **High Availability** | **99.99% Uptime** ($\le 52.6$ min downtime/year) | Eliminate single points of failure (SPOF) via multi-node deployments, load balancing, and database read replicas. |
-| **Low Latency (Reads)** | **$\le 100\text{ms}$** at 95th percentile | Cache hot home feeds and user profiles in Redis; utilize cursor-based pagination and database indexing. |
-| **Low Latency (Writes)**| **$\le 200\text{ms}$** at 95th percentile | Asynchronously offload heavy tasks (feed fan-out, push notifications) to Apache Kafka background workers. |
-| **Scalability** | Support **10x traffic spikes** during major events | Stateless API server instances scaling horizontally behind an Nginx/AWS ALB load balancer. |
-| **Eventual Consistency** | Feeds updated within **$\le 2\text{seconds}$** | While tweets and likes are strictly ACID in PostgreSQL, timeline fan-out across followers follows eventual consistency. |
-| **Security** | Zero data breaches or unauthorized modifications | Strict JWT validation, Argont2 password hashing, HTTPS encryption in transit, and SQL parameterization. |
+| **High Availability** | **99.99% Uptime** (Less than 52 mins downtime per year!) | We run multiple server instances behind a Load Balancer. If one server crashes, traffic automatically flows to the others! |
+| **Ultra-Fast Feeds** | **Under 100 milliseconds** | We pre-load hot home timelines in **Redis memory** so users don't wait for slow database joins. |
+| **Fast Tweet Posting**| **Under 200 milliseconds** | When you post a tweet, we save it quickly and let **Kafka** handle sending notifications in the background! |
+| **Traffic Spike Safety**| Handle **10x traffic surges** | Our servers are stateless, allowing us to spin up new server copies instantly during viral events. |
+| **Rock-Solid Security** | Zero data leaks | Hashed passwords, encrypted HTTPS traffic, and signed JWT login badges. |
 
 ---
 
-## 2.3 Scale Estimation & Back-of-the-Envelope Math
+## 3. Back-of-the-Envelope Math (How We Size Our Servers)
 
-To design a system that won't collapse under real-world load, we must calculate exact quantitative requirements based on standard baseline assumptions.
+To make sure our database doesn't run out of disk space and our web servers don't crash, let's do some simple math using standard industry numbers!
 
-### 1. Traffic & User Baseline Assumptions
-*   **Total Registered Users**: $10\text{ Million}$
-*   **Daily Active Users (DAU)**: $1\text{ Million}$
-*   **Average Tweets Published per DAU**: $5\text{ tweets/day}$ $\rightarrow$ **$5\text{ Million new tweets/day}$**
-*   **Average Feed Views per DAU**: $20\text{ views/day}$ $\rightarrow$ **$20\text{ Million timeline requests/day}$**
-*   **Average Likes per DAU**: $50\text{ likes/day}$ $\rightarrow$ **$50\text{ Million likes/day}$**
-*   **Average Comments per DAU**: $10\text{ comments/day}$ $\rightarrow$ **$10\text{ Million comments/day}$**
-*   **Read-to-Write Ratio**: Approximately **$5:1$** (Twitter is a read-heavy system).
+### 👥 The Traffic Assumptions
+* **Total Registered Users**: $10\text{ Million}$
+* **Daily Active Users (DAU)**: $1\text{ Million}$
+* **New Tweets Posted Daily**: $5\text{ Million tweets per day}$
+* **Timeline Feed Views Daily**: $20\text{ Million timeline refreshes per day}$
+* **Read-to-Write Ratio**: **$5:1$** (Twitter is read-heavy—people view 5 times more tweets than they post!).
 
 ---
 
-### 2. Query Per Second (QPS) Calculations
+### ⏱️ Requests Per Second (QPS)
+There are roughly **$100,000\text{ seconds}$ in a day**. Let's see how many requests hit our server every second:
 
-There are $86,400$ seconds in a day. For safety in backend sizing, we round down to $100,000\text{ seconds/day}$.
+$$\text{Tweet Posting Speed} = \frac{5,000,000\text{ tweets}}{100,000\text{ seconds}} = \mathbf{50\text{ Tweets / second}}$$
 
-$$\text{Average Tweet Write QPS} = \frac{5,000,000\text{ tweets}}{100,000\text{ seconds}} = \mathbf{50\text{ QPS}}$$
+$$\text{Feed Reading Speed} = \frac{20,000,000\text{ views}}{100,000\text{ seconds}} = \mathbf{200\text{ Feed Reads / second}}$$
 
-$$\text{Peak Tweet Write QPS (3x Spike)} = 50 \times 3 = \mathbf{150\text{ QPS}}$$
+$$\text{Likes & Comments Speed} = \frac{60,000,000\text{ actions}}{100,000\text{ seconds}} = \mathbf{600\text{ Actions / second}}$$
 
-$$\text{Average Feed Read QPS} = \frac{20,000,000\text{ reads}}{100,000\text{ seconds}} = \mathbf{200\text{ QPS}}$$
+$$\text{Total Peak System Traffic} \approx \mathbf{1,500\text{ to } 2,500\text{ requests per second}}$$
 
-$$\text{Peak Feed Read QPS (3x Spike)} = 200 \times 3 = \mathbf{600\text{ QPS}}$$
-
-$$\text{Average Engagement (Likes + Comments) QPS} = \frac{60,000,000\text{ actions}}{100,000\text{ seconds}} = \mathbf{600\text{ QPS}}$$
-
-$$\text{Total Peak System QPS} \approx \mathbf{1,500\text{ to } 2,500\text{ requests/second}}$$
-
-> 💡 **Architectural Takeaway**: A single well-optimized Node.js/Express server can handle $\approx 500\text{ to } 1,000\text{ QPS}$ of basic I/O tasks. To comfortably handle our peak load with redundancy, our production deployment will require **3 to 4 stateless API server instances** running behind a load balancer.
+> 💡 **What this means for our architecture**: A single modern Node.js server can handle about $800\text{ requests per second}$. To comfortably support $2,500\text{ peak requests}$ with backup redundancy, we will run **3 to 4 web server instances** behind an Nginx Load Balancer!
 
 ---
 
-### 3. Storage Capacity Estimation
+### 💾 Database Storage Math (5-Year Plan)
+How much hard drive space do we need to store 5 million new tweets every single day for 5 years?
 
-Let's calculate the storage required to store 5 million new tweets every day over a **5-year retention period**.
+1. **Text Tweet Storage**: Each tweet record (ID, author ID, text content, timestamps) takes about **$500\text{ bytes}$**.
+   * Daily Tweet Storage $= 5,000,000 \times 500\text{ bytes} = \mathbf{2.5\text{ GB per day}}$.
+   * Annual Tweet Storage $= 2.5\text{ GB} \times 365\text{ days} = \mathbf{912\text{ GB per year}}$.
+   * **5-Year Relational Database Need** $\approx \mathbf{4.5\text{ TB of disk space}}$.
 
-#### A. Single Tweet Record Footprint
-*   `id` (UUIDv4): $16\text{ bytes}$
-*   `user_id` (UUIDv4): $16\text{ bytes}$
-*   `content` (up to 280 chars UTF-8): $\approx 300\text{ bytes}$
-*   `created_at`, `updated_at` (Timestamps): $16\text{ bytes}$
-*   Metadata & Index Overhead: $\approx 152\text{ bytes}$
-*   **Total Size per Tweet Record** $\approx \mathbf{500\text{ bytes}}$
+2. **Photo Storage (AWS S3)**: Suppose 20% of tweets ($1\text{ Million/day}$) include a photo (averaging $200\text{ KB}$ each).
+   * Daily Photo Storage $= 1,000,000 \times 200\text{ KB} = \mathbf{200\text{ GB per day}}$.
+   * Annual Photo Storage $= \mathbf{73\text{ TB per year}}$.
 
-#### B. Daily & Annual Relational Storage (PostgreSQL)
-$$\text{Daily Tweet Storage} = 5,000,000\text{ tweets} \times 500\text{ bytes} = 2.5\text{ GB/day}$$
-
-$$\text{Annual Tweet Storage} = 2.5\text{ GB/day} \times 365\text{ days} = \mathbf{912.5\text{ GB/year}}$$
-
-$$\text{5-Year Relational Storage Need} \approx \mathbf{4.56\text{ TB}}$$
-
-> 💡 **Architectural Takeaway**: $4.5\text{ TB}$ over 5 years easily fits within a modern single PostgreSQL server equipped with SSD storage (which scales up to $16\text{ TB}+$ on AWS RDS). We do **not** need complex database sharding in V1; read replicas and standard indexing will easily support this load.
-
-#### C. Media Storage Requirements (AWS S3)
-*   Assume **20% of tweets** ($1\text{ Million tweets/day}$) include an image attachment.
-*   Average image file size after compression: $\approx 200\text{ KB}$.
-
-$$\text{Daily Media Storage} = 1,000,000 \times 200\text{ KB} = \mathbf{200\text{ GB/day}}$$
-
-$$\text{Annual Media Storage} = 200\text{ GB/day} \times 365\text{ days} = \mathbf{73\text{ TB/year}}$$
-
-> 💡 **Architectural Takeaway**: Relational databases should never store binary media files. Media will be offloaded to **AWS S3 / Cloud Storage**, while PostgreSQL only stores the $100\text{-byte}$ URL text string referencing the object.
+> 💡 **What this means for our architecture**: $4.5\text{ TB}$ of text data easily fits inside a single primary PostgreSQL database server! We do **not** need complex database sharding or splitting. For images, we never store binary photo files in our relational database—we offload them directly to **AWS S3 Cloud Storage**!
 
 ---
 
-### 4. Memory & Caching Requirements (Redis Sizing)
+### ⚡ Memory Cache Math (Redis Sizing)
+To make home timelines load in under 100 milliseconds, we keep the latest **200 Tweet IDs** for each active user inside **Redis RAM**.
 
-To meet our $\le 100\text{ms}$ read SLA, we must cache the home feeds of active users in **Redis**.
+* Memory per user timeline $= 200\text{ tweets} \times 40\text{ bytes} = \mathbf{8\text{ KB per user}}$.
+* Total Redis RAM needed $= 1,000,000\text{ Active Users} \times 8\text{ KB} = \mathbf{8\text{ GB of RAM}}$.
 
-#### Feed Cache Sizing Math
-*   We cache the latest **200 tweet IDs** for each Daily Active User ($1\text{ Million DAU}$).
-*   Each Tweet ID (UUID) is $16\text{ bytes}$ in memory.
-*   Overhead per list entry in Redis: $\approx 24\text{ bytes}$.
-*   Total memory per user feed $= 200 \times 40\text{ bytes} = 8\text{ KB}$.
-
-$$\text{Total Redis Feed Cache Memory} = 1,000,000\text{ DAU} \times 8\text{ KB} = \mathbf{8\text{ GB of RAM}}$$
-
-> 💡 **Architectural Takeaway**: An **$8\text{ GB}$ to $16\text{ GB}$ Redis instance** will easily hold the pre-computed timelines of every single active user in memory, guaranteeing sub-millisecond timeline retrieval!
+> 💡 **What this means for our architecture**: A simple **$16\text{ GB}$ Redis memory server** will easily hold the pre-built timelines of every single active user in RAM, guaranteeing lightning-fast feed scrolling!
 
 ---
 
-## 2.4 Summary of Sizing Requirements
+## 4. Architecture Sizing Summary
 
-| Infrastructure Component | Estimated Sizing Requirement | Architectural Solution |
+| Component | What We Need | Our High-Level Solution |
 | :--- | :--- | :--- |
-| **API Servers** | $2,500\text{ Peak QPS}$ | 4x Horizontal Node.js instances behind Load Balancer |
-| **Relational DB (PostgreSQL)**| $1\text{ TB/year}$ ($50\text{ Write QPS}$) | Single Primary DB with 2x Read Replicas + B-Tree Indexes |
-| **In-Memory Cache (Redis)** | $8\text{ GB RAM}$ | 16GB Redis Cluster (LRU eviction policy) |
-| **Object Storage (S3)** | $73\text{ TB/year}$ | AWS S3 Bucket with CloudFront CDN distribution |
+| **Web Servers** | Handle $2,500\text{ Peak requests/sec}$ | 4x Express API server instances behind Nginx |
+| **Relational DB** | Store $1\text{ TB/year}$ of tweet text | 1x PostgreSQL Master + 2x Read Replicas |
+| **Hot Memory Cache** | Store $8\text{ GB}$ of active user timelines | 16GB Redis Cache Cluster |
+| **Photo Storage** | Store $73\text{ TB/year}$ of uploaded media| AWS S3 Bucket + CloudFront CDN |

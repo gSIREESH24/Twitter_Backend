@@ -1,179 +1,93 @@
-# Chapter 5. Database Design & SQL Schema
+# Chapter 5. Database Design & Schemas
 
-> **Objective**: Provide exact, production-ready PostgreSQL Data Definition Language (DDL) schemas, establish strict indexing strategies for sub-millisecond query performance, explain our normalization and selective denormalization trade-offs, and define transaction concurrency controls.
-
----
-
-## 5.1 Why PostgreSQL?
-
-We select **PostgreSQL** as our primary relational database over NoSQL alternatives (like MongoDB or Cassandra) for Version 1 because:
-1.  **ACID Transactional Integrity**: Social networking actions (e.g., following a user while incrementing follower counters) require strict atomic transactions to prevent data drift and orphaned records.
-2.  **Relational Graph Integrity**: Strict foreign key constraints with cascading rules (`ON DELETE CASCADE`) automatically guarantee that deleting a user account cleanly scrubs all associated tweets, likes, and comments without manual cleanup scripts.
-3.  **Advanced Indexing Capabilities**: PostgreSQL supports B-Tree, Hash, GIN, and Partial indexes, enabling lightning-fast cursor pagination and text search queries over millions of rows.
+> **How do we store permanent data?** A high-level guide to our table structures, why we index columns for fast searching, and how we count likes without slowing down the database.
 
 ---
 
-## 5.2 Production DDL SQL Schema
+## 1. Why We Chose PostgreSQL (Relational Database)
 
-The following production-grade DDL scripts define our exact table structures, UUID primary keys, check constraints, and default timestamp generation:
+There are two main types of databases in software engineering: NoSQL (like MongoDB) and Relational SQL (like PostgreSQL). For Version 1 of our social network, we choose **PostgreSQL** because:
 
+1. **Safety First (ACID Guarantees)**: When someone clicks "Follow", two things happen: we create a follow link, and we increase their follower count. PostgreSQL guarantees both actions succeed together or fail together—never leaving broken data!
+2. **Automatic Cleanup (Cascading Deletes)**: If a user deletes their account, PostgreSQL automatically wipes out all their tweets, likes, and comments for us without leaving messy orphaned data behind.
+3. **Powerful Indexing**: PostgreSQL allows us to create specialized search indexes (like the index at the back of a textbook), allowing us to find a user's newest tweets in a fraction of a millisecond!
+
+---
+
+## 2. High-Level Table Structures
+
+Here is a clean, simple breakdown of what we store inside our primary database tables:
+
+### 👤 1. Users Table
+Stores account identity and public profile details.
+
+| Field Name | Data Type | High-Level Purpose |
+| :--- | :--- | :--- |
+| `id` | UUID | Unique random identifier for the user account. |
+| `username` | String (30) | Unique display handle (e.g., `@sireesh_dev`). |
+| `email` | String (255) | Unique email address used for login and alerts. |
+| `password_hash` | String | The secure, unreadable hashed password string. |
+| `bio` | String (160) | Short public profile description. |
+| `profile_image_url`| String | URL pointing to their avatar photo stored in AWS S3. |
+| `created_at` | Timestamp | Exact date and time the account was registered. |
+
+---
+
+### 📝 2. Tweets Table
+Stores short messages and attached counter metrics.
+
+| Field Name | Data Type | High-Level Purpose |
+| :--- | :--- | :--- |
+| `id` | UUID | Unique identifier for the tweet. |
+| `user_id` | UUID | Links to the author who wrote this tweet. |
+| `content` | String (280) | The text message of the tweet ($\le 280$ characters). |
+| `likes_count` | Integer | **Direct counter** tracking total likes received. |
+| `comments_count`| Integer | **Direct counter** tracking total reply comments. |
+| `created_at` | Timestamp | Exact timestamp when the tweet was published. |
+
+---
+
+### 🤝 3. Follows Table (Social Graph)
+A simple junction table linking followers to the accounts they follow.
+
+| Field Name | Data Type | High-Level Purpose |
+| :--- | :--- | :--- |
+| `follower_id` | UUID | The user who clicked the "Follow" button. |
+| `following_id` | UUID | The target account being subscribed to. |
+| `created_at` | Timestamp | Timestamp when the follow relationship started. |
+
+> 💡 **Rule**: Together, `(follower_id, following_id)` form a unique pair so you can never follow the same person twice!
+
+---
+
+### ❤️ 4. Likes & 💬 5. Comments Tables
+Tracks user engagement on published tweets.
+
+* **Likes Table**: Stores pairs of `(user_id, tweet_id)`. The database enforces uniqueness so a user cannot double-like a tweet!
+* **Comments Table**: Stores `id`, `user_id`, `tweet_id`, and `content` (up to 280 characters of text reply).
+
+---
+
+## 3. Why Indexing is a Superpower (Making Queries Fast)
+
+Imagine looking for the word "Architecture" in a 1,000-page textbook. If there is no index, you have to read every single page one by one! But if you flip to the alphabetical index at the back, you find the exact page number instantly.
+
+In our database, we create **B-Tree Indexes** on frequently searched columns:
+* **Username & Email**: Finds user login accounts instantly during sign-in.
+* **Timeline Index `(user_id, created_at DESC)`**: This is our most critical index! When a user loads a profile timeline, PostgreSQL uses this index to grab their newest 20 tweets in **under 2 milliseconds**, without sorting rows in memory!
+
+---
+
+## 4. Why We Store Counters Directly on Tweets (Denormalization)
+
+In a traditional database design, if you want to know how many likes a tweet has, you ask the database to count them:
 ```sql
--- Enable UUID extension for generating cryptographically random IDs
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
---------------------------------------------------------------------------------
--- 1. USERS TABLE
---------------------------------------------------------------------------------
-CREATE TABLE users (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    username VARCHAR(30) NOT NULL UNIQUE,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    bio VARCHAR(160) DEFAULT '',
-    profile_image_url VARCHAR(512) DEFAULT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_username_length CHECK (char_length(username) >= 3)
-);
-
---------------------------------------------------------------------------------
--- 2. TWEETS TABLE (With Denormalized Counters)
---------------------------------------------------------------------------------
-CREATE TABLE tweets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    content VARCHAR(280) NOT NULL,
-    likes_count INTEGER DEFAULT 0 NOT NULL,
-    comments_count INTEGER DEFAULT 0 NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_content_not_empty CHECK (char_length(trim(content)) > 0),
-    CONSTRAINT chk_likes_non_negative CHECK (likes_count >= 0),
-    CONSTRAINT chk_comments_non_negative CHECK (comments_count >= 0)
-);
-
---------------------------------------------------------------------------------
--- 3. FOLLOWS TABLE (Junction Table for Social Graph)
---------------------------------------------------------------------------------
-CREATE TABLE follows (
-    follower_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    following_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (follower_id, following_id),
-    CONSTRAINT chk_no_self_follow CHECK (follower_id != following_id)
-);
-
---------------------------------------------------------------------------------
--- 4. LIKES TABLE (Junction Table for Tweet Engagement)
---------------------------------------------------------------------------------
-CREATE TABLE likes (
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    tweet_id UUID NOT NULL REFERENCES tweets(id) ON DELETE CASCADE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, tweet_id)
-);
-
---------------------------------------------------------------------------------
--- 5. COMMENTS TABLE
---------------------------------------------------------------------------------
-CREATE TABLE comments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    tweet_id UUID NOT NULL REFERENCES tweets(id) ON DELETE CASCADE,
-    content VARCHAR(280) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_comment_not_empty CHECK (char_length(trim(content)) > 0)
-);
-
---------------------------------------------------------------------------------
--- 6. NOTIFICATIONS TABLE
---------------------------------------------------------------------------------
-CREATE TABLE notifications (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    type VARCHAR(30) NOT NULL, -- e.g., 'FOLLOW', 'LIKE', 'COMMENT'
-    reference_id UUID DEFAULT NULL, -- references tweet_id or follow_id
-    is_read BOOLEAN DEFAULT FALSE NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
---------------------------------------------------------------------------------
--- 7. MEDIA TABLE
---------------------------------------------------------------------------------
-CREATE TABLE media (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    tweet_id UUID NOT NULL REFERENCES tweets(id) ON DELETE CASCADE,
-    media_url VARCHAR(512) NOT NULL,
-    media_type VARCHAR(50) DEFAULT 'image/jpeg' NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
+-- Slow approach: Counting hundreds of thousands of rows every time!
+SELECT COUNT(*) FROM likes WHERE tweet_id = '123...';
 ```
+If a viral tweet reaches 500,000 likes, running a count query every time someone views their feed would melt our database CPU!
 
----
-
-## 5.3 Index Design & Performance Strategy
-
-Without proper indexing, database queries degrade from $O(\log N)$ B-Tree lookups to catastrophic $O(N)$ full table scans as the database grows to millions of rows. We define explicit indexes optimized for our exact query access patterns:
-
-```sql
--- 1. Optimize User Profile Lookups by Username & Email
-CREATE INDEX idx_users_username ON users(username);
-CREATE INDEX idx_users_email ON users(email);
-
--- 2. CRITICAL: Composite Index for User Timeline Retrieval (Cursor Pagination)
--- Allows instant fetching of a user's tweets ordered by newest first without sorting in memory
-CREATE INDEX idx_tweets_user_created ON tweets(user_id, created_at DESC);
-
--- 3. Optimize Social Graph Queries (Who is following whom?)
-CREATE INDEX idx_follows_follower ON follows(follower_id);
-CREATE INDEX idx_follows_following ON follows(following_id);
-
--- 4. Optimize Comment Retrieval for a specific Tweet
-CREATE INDEX idx_comments_tweet_created ON comments(tweet_id, created_at ASC);
-
--- 5. Optimize Unread Notification Badge Counts & Feed
-CREATE INDEX idx_notifications_user_read_created ON notifications(user_id, is_read, created_at DESC);
-
--- 6. Optimize Media lookups when joining with Tweets
-CREATE INDEX idx_media_tweet_id ON media(tweet_id);
-```
-
-### Why Composite Index `(user_id, created_at DESC)` is Mandatory
-When fetching a user's profile timeline (`SELECT * FROM tweets WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`), a simple index on `user_id` would require PostgreSQL to find all matching rows and then execute an expensive in-memory sort operation. By creating a **composite index** that pre-sorts by `created_at DESC` within each `user_id` bucket, the query executes in sub-millisecond time by reading directly from the index leaves!
-
----
-
-## 5.4 Normalization vs. Selective Denormalization
-
-Our schema strictly adheres to **3rd Normal Form (3NF)** to eliminate data redundancy, with one deliberate engineering exception: **Denormalized Engagement Counters**.
-
-### The Problem with 100% Normalization
-In a purely normalized database, finding how many likes a tweet has requires executing an aggregate query:
-```sql
-SELECT COUNT(*) FROM likes WHERE tweet_id = '123e4567-e89b-12d3-a456-426614174000';
-```
-When a viral tweet reaches 500,000 likes, executing a `COUNT(*)` query every time the tweet is viewed on a timeline would instantly cause 100% CPU utilization on PostgreSQL!
-
-### The Denormalization Solution
-We store explicit integer columns `likes_count` and `comments_count` directly inside the `tweets` table.
-*   **When a user likes a tweet**: We insert the like record and atomically increment the counter inside a single SQL transaction:
-    ```sql
-    BEGIN;
-    INSERT INTO likes (user_id, tweet_id) VALUES ($1, $2);
-    UPDATE tweets SET likes_count = likes_count + 1 WHERE id = $2;
-    COMMIT;
-    ```
-*   **When reading a feed**: The like count is retrieved instantly as a simple integer attribute without executing any `COUNT(*)` joins!
-
----
-
-## 5.5 Transactional Concurrency & Race Conditions
-
-In high-concurrency environments, two users might click "Like" on the exact same millisecond, or a user might double-click the like button rapidly.
-
-### Preventing Duplicate Likes (Unique Constraint Protection)
-Because our `likes` table enforces a **Composite Primary Key on `(user_id, tweet_id)`**, the database kernel itself prevents duplicate likes at the storage engine level. If a double-submit occurs, PostgreSQL throws a `23505 Unique Violation` error, which our Repository layer catches and cleanly ignores without corrupting counters.
-
-### Preventing Counter Drift (Row-Level Locking)
-To ensure concurrent counter updates never overwrite each other, we rely on PostgreSQL's atomic UPDATE syntax (`likes_count = likes_count + 1`), which automatically applies a **Row-Level Exclusive Lock (`FOR UPDATE`)** on the target tweet row for the duration of the microsecond update, guaranteeing 100% mathematical accuracy.
+### The High-Level Solution
+We store an explicit integer column called `likes_count` directly inside the `Tweets` table!
+* When someone clicks "Like", we insert the like record and add $+1$ to `likes_count` instantly.
+* When someone views a timeline, we just read the number directly from `likes_count` with zero heavy counting required!
