@@ -43,9 +43,10 @@ In a professional backend, every incoming HTTP request travels through **4 disti
 ```
 
 ### 🚫 The Strict Rules of Separation
-* **The Controller MUST NOT**: Write database SQL queries or decide business rules.
-* **The Service MUST NOT**: Know about web HTTP status codes (`200 OK`, `404 Not Found`) or web headers.
-* **The Repository MUST NOT**: Check if a user is banned or make business decisions—it simply saves or reads data!
+
+- **The Controller MUST NOT**: Write database SQL queries or decide business rules.
+- **The Service MUST NOT**: Know about web HTTP status codes (`200 OK`, `404 Not Found`) or web headers.
+- **The Repository MUST NOT**: Check if a user is banned or make business decisions—it simply saves or reads data!
 
 ---
 
@@ -104,15 +105,17 @@ We follow the 5 **SOLID Principles** to make sure our codebase remains clean and
 In amateur codebases, every single API URL handler is wrapped in repeated `try { ... } catch (err) { ... }` blocks—repeated over 200 times!
 
 ### ✅ Our High-Level Solution
+
 We use a **Centralized Global Error Handler**.
-* Our controllers write clean, readable code without messy `try/catch` blocks.
-* If anything goes wrong (e.g., a tweet isn't found or the database goes offline), an automatic safety net catches the error and forwards it to our **Global Error Middleware**.
-* The global handler automatically logs the problem and sends a clean, polite JSON error message back to the mobile app!
+
+- Our controllers write clean, readable code without messy `try/catch` blocks.
+- If anything goes wrong (e.g., a tweet isn't found or the database goes offline), an automatic safety net catches the error and forwards it to our **Global Error Middleware**.
+- The global handler automatically logs the problem and sends a clean, polite JSON error message back to the mobile app!
 
 ---
 
 ## 5. Helpful Infrastructure Tools
 
-* **Configuration Management (`/config`)**: We never hardcode passwords or database URLs in our code! We read them from secure `.env` files and validate them when the server starts up.
-* **Structured Logging (Winston)**: We never use simple `console.log()`. We use structured JSON logs that record timestamps, error details, and execution speed so we can debug issues instantly in production!
-* **Health Check Endpoint (`GET /health`)**: Our servers expose a simple `/health` URL that replies `{"status": "UP"}`. AWS Load Balancers check this every 5 seconds to make sure our server is healthy and ready to accept user traffic!
+- **Configuration Management (`/config`)**: We never hardcode passwords or database URLs in our code! We read them from secure `.env` files and validate them when the server starts up.
+- **Structured Logging (Winston)**: We never use simple `console.log()`. We use structured JSON logs that record timestamps, error details, and execution speed so we can debug issues instantly in production!
+- **Health Check Endpoint (`GET /health`)**: Our servers expose a simple `/health` URL that replies `{"status": "UP"}`. AWS Load Balancers check this every 5 seconds to make sure our server is healthy and ready to accept user traffic!

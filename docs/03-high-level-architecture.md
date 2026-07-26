@@ -9,6 +9,7 @@
 When a user opens Twitter, their request travels across the internet through several specialized layers. Here is the exact layout of our servers and databases:
 
 ### 🏛️ ASCII Architecture Topology
+
 ```
 [ 📱 Web / Mobile Clients ]
          │
@@ -37,6 +38,7 @@ When a user opens Twitter, their request travels across the internet through sev
 ```
 
 ### 📊 Interactive Flowchart (Mermaid)
+
 ```mermaid
 flowchart TD
     subgraph Clients ["Clients"]
@@ -73,10 +75,10 @@ flowchart TD
     Web -->|Static Assets| CDN
     Mobile -->|Static Assets| CDN
     CDN -->|Origin Fetch| S3
-    
+
     Web -->|HTTPS REST API| LB
     Mobile -->|HTTPS REST API| LB
-    
+
     LB -->|Round-Robin| API1
     LB -->|Round-Robin| API2
     LB -->|Round-Robin| API3
@@ -119,6 +121,7 @@ flowchart TD
 Many beginners try to build 10 different microservice repositories on Day 1. While microservices are great for companies with 5,000 engineers, they introduce massive network delays and complicated debugging for new projects!
 
 We choose a **Modular Monolith** for Version 1 because:
+
 1. **Lightning-Fast Speed**: When a user posts a tweet, our internal modules communicate instantly in computer memory ($\le 1\text{ms}$) rather than making slow network calls across servers.
 2. **Safe Database Transactions**: If a user deletes their account, we can clean up their profile, tweets, and likes safely inside a single database transaction.
 3. **Microservice-Ready by Design**: We organize our folders cleanly by **feature** (`/user`, `/tweet`, `/feed`). When our traffic grows past 10 Million users, we can easily slice out any folder into its own independent microservice without rewriting our code!
@@ -128,8 +131,9 @@ We choose a **Modular Monolith** for Version 1 because:
 ## 3. Stateless Web Servers (The Secret to Easy Scaling)
 
 To make sure our app never goes down (99.99% Uptime), our Express API servers are **100% Stateless**.
-* **What is stateless?** It means the web server does not store user login sessions or uploaded photos on its local hard drive.
-* **Why does this matter?** If Server Node #1 suddenly crashes or gets restarted, Nginx automatically redirects traffic to Server Node #2. Because login data lives safely in Redis and photos live in AWS S3, the user experiences zero interruption!
+
+- **What is stateless?** It means the web server does not store user login sessions or uploaded photos on its local hard drive.
+- **Why does this matter?** If Server Node #1 suddenly crashes or gets restarted, Nginx automatically redirects traffic to Server Node #2. Because login data lives safely in Redis and photos live in AWS S3, the user experiences zero interruption!
 
 ---
 

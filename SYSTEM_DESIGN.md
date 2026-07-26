@@ -36,10 +36,11 @@ When 1 Million users open Twitter every day, they expect instant timelines, quic
 ```
 
 ### 🧰 Why We Chose Each Tool
-* **Node.js & Express**: Fast, lightweight, and perfect for handling thousands of concurrent user connections.
-* **PostgreSQL (The Permanent Vault)**: Stores relational data like user profiles, tweets, follows, and comments safely with strict ACID guarantees (so data is never lost or corrupted).
-* **Redis (The Lightning Cache)**: Holds user sessions and pre-computed home timelines in RAM so feeds load in under 5 milliseconds!
-* **Apache Kafka (The Asynchronous Messenger)**: When a celebrity tweets, Kafka takes over behind the scenes to update millions of follower timelines and send notifications without freezing the web server.
+
+- **Node.js & Express**: Fast, lightweight, and perfect for handling thousands of concurrent user connections.
+- **PostgreSQL (The Permanent Vault)**: Stores relational data like user profiles, tweets, follows, and comments safely with strict ACID guarantees (so data is never lost or corrupted).
+- **Redis (The Lightning Cache)**: Holds user sessions and pre-computed home timelines in RAM so feeds load in under 5 milliseconds!
+- **Apache Kafka (The Asynchronous Messenger)**: When a celebrity tweets, Kafka takes over behind the scenes to update millions of follower timelines and send notifications without freezing the web server.
 
 ---
 
@@ -92,20 +93,20 @@ flowchart LR
     User -->|follows| User
     User -->|likes| Like["❤️ LIKE"]
     User -->|writes| Comment["💬 COMMENT"]
-    
+
     Tweet -->|receives| Like
     Tweet -->|has| Comment
     Tweet -->|contains| Media["🖼️ MEDIA"]
     Tweet -->|triggers| Notif["🔔 NOTIFICATION"]
 ```
 
-* **User**: An account with an email, username, hashed password, bio, and profile avatar.
-* **Tweet**: A short message ($\le 280$ characters) published by a user.
-* **Follow**: A one-way link between a *Follower* and the account they are *Following*.
-* **Like**: An affirmative interaction linking a User to a Tweet.
-* **Comment**: A threaded reply attached to a parent Tweet.
-* **Notification**: An alert informing a user that someone followed them, liked their tweet, or replied.
-* **Media**: An image or graphic stored in AWS S3 and linked to a tweet.
+- **User**: An account with an email, username, hashed password, bio, and profile avatar.
+- **Tweet**: A short message ($\le 280$ characters) published by a user.
+- **Follow**: A one-way link between a _Follower_ and the account they are _Following_.
+- **Like**: An affirmative interaction linking a User to a Tweet.
+- **Comment**: A threaded reply attached to a parent Tweet.
+- **Notification**: An alert informing a user that someone followed them, liked their tweet, or replied.
+- **Media**: An image or graphic stored in AWS S3 and linked to a tweet.
 
 ---
 
@@ -113,16 +114,16 @@ flowchart LR
 
 Here is a high-level cheat sheet of our core RESTful API endpoints:
 
-| Feature Area | Method | Endpoint URL | Who Can Access? | What Does It Do? |
-| :--- | :---: | :--- | :---: | :--- |
-| **Auth** | `POST` | `/api/v1/auth/signup` | Public | Create a new account and get login tokens. |
-| **Auth** | `POST` | `/api/v1/auth/login` | Public | Log in with email/password and get JWT tokens. |
-| **Users** | `GET` | `/api/v1/users/:username` | Public | View anyone's public profile and follower count. |
-| **Tweets** | `POST` | `/api/v1/tweets` | Logged In | Publish a new tweet with optional image links. |
-| **Tweets** | `DELETE` | `/api/v1/tweets/:id` | Tweet Owner | Delete your own tweet. |
-| **Feeds** | `GET` | `/api/v1/feed/home` | Logged In | Get your personalized home timeline (fast scroll). |
-| **Social** | `POST` | `/api/v1/users/:id/follow` | Logged In | Follow a target user account. |
-| **Social** | `DELETE`| `/api/v1/users/:id/follow` | Logged In | Unfollow a target user account. |
+| Feature Area |  Method  | Endpoint URL               | Who Can Access? | What Does It Do?                                   |
+| :----------- | :------: | :------------------------- | :-------------: | :------------------------------------------------- |
+| **Auth**     |  `POST`  | `/api/v1/auth/signup`      |     Public      | Create a new account and get login tokens.         |
+| **Auth**     |  `POST`  | `/api/v1/auth/login`       |     Public      | Log in with email/password and get JWT tokens.     |
+| **Users**    |  `GET`   | `/api/v1/users/:username`  |     Public      | View anyone's public profile and follower count.   |
+| **Tweets**   |  `POST`  | `/api/v1/tweets`           |    Logged In    | Publish a new tweet with optional image links.     |
+| **Tweets**   | `DELETE` | `/api/v1/tweets/:id`       |   Tweet Owner   | Delete your own tweet.                             |
+| **Feeds**    |  `GET`   | `/api/v1/feed/home`        |    Logged In    | Get your personalized home timeline (fast scroll). |
+| **Social**   |  `POST`  | `/api/v1/users/:id/follow` |    Logged In    | Follow a target user account.                      |
+| **Social**   | `DELETE` | `/api/v1/users/:id/follow` |    Logged In    | Unfollow a target user account.                    |
 
 ---
 
@@ -132,7 +133,7 @@ How does the server know who you are without making you log in on every single b
 
 1. **No Plaintext Passwords**: We never store actual passwords in the database. We use **Argon2 / bcrypt** to turn your password into an unreadable cryptographic hash (`$2b$12$e9k...`). Even if a hacker steals the database, they cannot read your password!
 2. **Stateless JWT Tokens**: When you log in, the server gives you a digital badge called a **JSON Web Token (JWT)**.
-3. **Every Request**: When you click "Like Tweet", your app sends this JWT badge in the request header. Our security middleware checks the badge signature and says: *"Ah, this is User #101! Let them pass."*
+3. **Every Request**: When you click "Like Tweet", your app sends this JWT badge in the request header. Our security middleware checks the badge signature and says: _"Ah, this is User #101! Let them pass."_
 4. **Token Rotation**: To keep you super safe, your Access Badge expires every **15 minutes**. A secure, hidden **Refresh Cookie** automatically gets you a new badge in the background without bothering you!
 
 ---

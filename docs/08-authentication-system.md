@@ -8,8 +8,8 @@
 
 Many beginners confuse these two words! Here is the simple difference:
 
-* **🔐 Authentication (Who are you?)**: Verifying someone's identity. When you type your email `sireesh@gmail.com` and password, the server checks if you really are Sireesh.
-* **👮 Authorization (What are you allowed to do?)**: Checking permissions. Once logged in, if User A tries to click "Delete Tweet #101", the server checks: *"Is User A the actual author of Tweet #101?"* If not, permission is denied!
+- **🔐 Authentication (Who are you?)**: Verifying someone's identity. When you type your email `sireesh@gmail.com` and password, the server checks if you really are Sireesh.
+- **👮 Authorization (What are you allowed to do?)**: Checking permissions. Once logged in, if User A tries to click "Delete Tweet #101", the server checks: _"Is User A the actual author of Tweet #101?"_ If not, permission is denied!
 
 ---
 
@@ -18,7 +18,9 @@ Many beginners confuse these two words! Here is the simple difference:
 If you store passwords as normal text (`password123`) in a database, and a hacker ever steals a database backup, every single user's account is compromised instantly!
 
 ### 🛡️ The Solution: Password Hashing (Argon2 / bcrypt)
+
 We use industry-standard cryptographic hashing algorithms like **Argon2** or **bcrypt**:
+
 1. When you sign up with password `SecurePassword123`, we run it through a one-way mathematical blender that adds a random secret string (called a **Salt**).
 2. The output becomes an unreadable hash string: `$2b$12$e9k...Z8q...`
 3. We store ONLY this hash in the database. Even we, the system engineers, cannot reverse this hash to see your real password!
@@ -45,10 +47,10 @@ What if a hacker intercepts your JWT badge on public Wi-Fi? If that badge lasted
 
 To prevent this, we use a **Dual Token System**:
 
-| Token Type | Lifespan | How It Works & Why It is Safe |
-| :--- | :---: | :--- |
-| **🎟️ Access Token** | **15 Minutes** | This is your everyday working badge. Your phone sends it with every API request. Because it expires in just 15 minutes, if a hacker steals it, it becomes useless very quickly! |
-| **🍪 Refresh Token**| **30 Days** | Stored safely in a hidden, encrypted browser cookie (`HttpOnly`). When your 15-minute Access Token expires, your phone quietly presents this Refresh Token to get a fresh Access Token in the background—**without asking you to re-type your password!** |
+| Token Type           |    Lifespan    | How It Works & Why It is Safe                                                                                                                                                                                                                             |
+| :------------------- | :------------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **🎟️ Access Token**  | **15 Minutes** | This is your everyday working badge. Your phone sends it with every API request. Because it expires in just 15 minutes, if a hacker steals it, it becomes useless very quickly!                                                                           |
+| **🍪 Refresh Token** |  **30 Days**   | Stored safely in a hidden, encrypted browser cookie (`HttpOnly`). When your 15-minute Access Token expires, your phone quietly presents this Refresh Token to get a fresh Access Token in the background—**without asking you to re-type your password!** |
 
 ---
 
@@ -57,6 +59,7 @@ To prevent this, we use a **Dual Token System**:
 Here is a clean ASCII visual diagram showing how login and API requests flow securely between your phone and our server:
 
 ### 1️⃣ The Login Flow
+
 ```
 [ 📱 Phone App ]               [ 🌐 Express Server ]               [ 🐘 PostgreSQL DB ]
        │                                 │                                   │
@@ -69,6 +72,7 @@ Here is a clean ASCII visual diagram showing how login and API requests flow sec
 ```
 
 ### 2️⃣ The Protected API Request Flow
+
 ```
 [ 📱 Phone App ]               [ 🔐 Auth Middleware ]               [ 📝 Tweet Controller ]
        │                                 │                                   │
@@ -84,6 +88,6 @@ Here is a clean ASCII visual diagram showing how login and API requests flow sec
 
 ## 6. How Logout Works (Revoking Tokens)
 
-When you click "Log Out", your phone deletes the 15-minute Access Token from its memory. 
+When you click "Log Out", your phone deletes the 15-minute Access Token from its memory.
 
 To make sure nobody can reuse your 30-day Refresh Token, we take its unique token ID and place it onto a **Redis Blacklist** (like a VIP club bouncer list). If anyone ever tries to use that Refresh Token again, our server checks Redis, sees it on the blacklist, and rejects it immediately!

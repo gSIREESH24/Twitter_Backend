@@ -21,3 +21,11 @@ ts-node-dev
 @types/bcrypt 
 prisma
 
+## Formatting and Linting
+eslint 
+prettier 
+@typescript-eslint/parser 
+@typescript-eslint/eslint-plugin 
+eslint-config-prettier 
+eslint-plugin-import
+
