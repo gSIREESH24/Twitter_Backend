@@ -8,52 +8,106 @@
 
 Our architecture follows a clean, decoupled distributed system topology. Incoming client requests pass through edge routing and validation layers before reaching our stateless application servers, which coordinate persistence, caching, and async event streaming.
 
+### 🏛️ ASCII Architecture Topology
+```
+[ Web / Mobile Clients ]
+         │
+         ├─── (Static Assets) ───► [ CloudFront CDN ] ───► [ AWS S3 Media ]
+         │
+         └─── (HTTPS REST API) ──► [ Load Balancer / Nginx ]
+                                            │
+                                            ▼ (Round-Robin)
+                                   [ Stateless Compute ]
+                                 (Express Nodes 1, 2, 3)
+                                            │
+           ┌────────────────────────────────┼────────────────────────────────┐
+           │                                │                                │
+ (ACID     │                     (Read      │                      (Session  │        (Publish
+  Write)   ▼                      Replicas) ▼                       / Feed)  ▼         Events)
+┌──────────────────────┐   ┌──────────────────────────┐   ┌─────────────────────┐       │
+│ PostgreSQL Master DB │──►│ PostgreSQL Read Replicas │   │ Redis Cache Cluster │       │
+└──────────┬───────────┘   └──────────────────────────┘   └──────────▲──────────┘       │
+           │                                                         │                  ▼
+           │  ┌──────────────────────────────────────────────────────┴──────┐  ┌────────────────┐
+           │  │                      Kafka Event Bus                        │◄─┤ Apache Kafka   │
+           │  └──────┬──────────────────────────────┬───────────────────────┘  │ Brokers        │
+           │         │                              │                          └────────────────┘
+           ▼         ▼                              ▼
+ [ Notification Push Worker ]           [ Timeline Fan-out Worker ]
+```
+
+### 📊 Interactive Flowchart (Mermaid)
 ```mermaid
 flowchart TD
-    subgraph Clients
-        Web[Web Browser App]
-        Mobile[iOS / Android App]
+    subgraph Clients ["Clients"]
+        Web["Web Browser App"]
+        Mobile["iOS and Android App"]
     end
 
-    subgraph Edge Layer
-        CDN[CloudFront CDN]
-        LB[Nginx Load Balancer / AWS ALB]
+    subgraph EdgeLayer ["Edge Layer"]
+        CDN["CloudFront CDN"]
+        LB["Nginx Load Balancer / AWS ALB"]
     end
 
-    subgraph Compute Layer [Stateless Compute Layer]
-        API1[Express Server Node 1]
-        API2[Express Server Node 2]
-        API3[Express Server Node 3]
+    subgraph ComputeLayer ["Stateless Compute Layer"]
+        API1["Express Server Node 1"]
+        API2["Express Server Node 2"]
+        API3["Express Server Node 3"]
     end
 
-    subgraph Storage & Caching Layer
-        PG_Master[(PostgreSQL Master DB)]
-        PG_Replica1[(PostgreSQL Read Replica 1)]
-        PG_Replica2[(PostgreSQL Read Replica 2)]
-        Redis[(Redis In-Memory Cluster)]
-        S3[AWS S3 Media Storage]
+    subgraph StorageLayer ["Storage and Caching Layer"]
+        PG_Master[("PostgreSQL Master DB")]
+        PG_Replica1[("PostgreSQL Read Replica 1")]
+        PG_Replica2[("PostgreSQL Read Replica 2")]
+        Redis[("Redis In-Memory Cluster")]
+        S3["AWS S3 Media Storage"]
     end
 
-    subgraph Async Event Streaming Layer
-        Kafka[Apache Kafka Event Bus]
-        Worker_Feed[Timeline Fan-out Worker]
-        Worker_Notif[Notification Push Worker]
-        Worker_Analytics[Analytics & Audit Worker]
+    subgraph AsyncLayer ["Async Event Streaming Layer"]
+        Kafka["Apache Kafka Event Bus"]
+        Worker_Feed["Timeline Fan-out Worker"]
+        Worker_Notif["Notification Push Worker"]
+        Worker_Analytics["Analytics and Audit Worker"]
     end
 
-    Web & Mobile -->|Static Assets & Images| CDN
+    Web -->|Static Assets| CDN
+    Mobile -->|Static Assets| CDN
     CDN -->|Origin Fetch| S3
-    Web & Mobile -->|HTTPS REST API| LB
-    LB -->|Round-Robin| API1 & API2 & API3
+    
+    Web -->|HTTPS REST API| LB
+    Mobile -->|HTTPS REST API| LB
+    
+    LB -->|Round-Robin| API1
+    LB -->|Round-Robin| API2
+    LB -->|Round-Robin| API3
 
-    API1 & API2 & API3 -->|Write (ACID)| PG_Master
-    API1 & API2 & API3 -->|Read (Queries)| PG_Replica1 & PG_Replica2
-    API1 & API2 & API3 -->|Cache Lookups & Sessions| Redis
-    API1 & API2 & API3 -->|Pre-signed Upload URLs| S3
-    API1 & API2 & API3 -->|Publish Events| Kafka
+    API1 -->|Write ACID| PG_Master
+    API2 -->|Write ACID| PG_Master
+    API3 -->|Write ACID| PG_Master
 
-    PG_Master -->|Async Replication| PG_Replica1 & PG_Replica2
-    Kafka -->|Consume Events| Worker_Feed & Worker_Notif & Worker_Analytics
+    API1 -->|Read Queries| PG_Replica1
+    API2 -->|Read Queries| PG_Replica1
+    API3 -->|Read Queries| PG_Replica2
+
+    API1 -->|Cache Lookups| Redis
+    API2 -->|Cache Lookups| Redis
+    API3 -->|Cache Lookups| Redis
+
+    API1 -->|Upload URLs| S3
+    API2 -->|Upload URLs| S3
+    API3 -->|Upload URLs| S3
+
+    API1 -->|Publish Events| Kafka
+    API2 -->|Publish Events| Kafka
+    API3 -->|Publish Events| Kafka
+
+    PG_Master -->|Async Replication| PG_Replica1
+    PG_Master -->|Async Replication| PG_Replica2
+
+    Kafka -->|Consume Events| Worker_Feed
+    Kafka -->|Consume Events| Worker_Notif
+    Kafka -->|Consume Events| Worker_Analytics
+
     Worker_Feed -->|Push Timeline IDs| Redis
     Worker_Notif -->|Insert Notification Record| PG_Master
 ```

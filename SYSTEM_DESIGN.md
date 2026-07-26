@@ -68,37 +68,80 @@ Every incoming HTTP request traverses a strict, unidirectional pipeline. Each la
 
 ## 3. High-Level Architecture Component Map
 
+### 🏛️ ASCII Architecture Topology
+```
+[ Web / Mobile Clients ]
+         │
+         ▼ (HTTPS / REST API)
+[ Load Balancer / Nginx ]
+         │
+         ▼
+[ API Gateway / Express ]
+         │
+         ▼
+┌──────────────────────────────────────────────┐
+│ Auth and Middleware Pipeline                 │
+│  ├── 1. JWT Auth Middleware                  │
+│  └── 2. DTO Validation Middleware (Zod)      │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│ Modular Monolith Core                        │
+│  ├── User Module       ├── Tweet Module      │
+│  ├── Feed Module       └── Follow Module     │
+└──────┬──────────┬───────────┬─────────┬──────┘
+       │          │           │         │
+ (ACID │   (Read  │  (Session │         │ (Publish Events)
+ Write)│  Replicas)│   / Feed) │         │
+       ▼          ▼           ▼         ▼
+┌──────────┐ ┌──────────┐ ┌───────┐ ┌───────────────┐
+│PostgreSQL│ │PostgreSQL│ │ Redis │ │ Apache Kafka  │
+│  Master  │ │ Replicas │ │Cluster│ │ Event Brokers │
+└──────────┘ └──────────┘ └───────┘ └───────┬───────┘
+                                            │
+               ┌────────────────────────────┼────────────────────────────┐
+               ▼                            ▼                            ▼
+   ┌───────────────────────┐    ┌───────────────────────┐    ┌───────────────────────┐
+   │  Notification Worker  │    │  Timeline Feed Worker │    │    Analytics Worker   │
+   └───────────┬───────────┘    └───────────┬───────────┘    └───────────────────────┘
+               │                            │
+               ▼                            ▼
+      [ User Devices ]           [ Update Redis Feed ]
+```
+
+### 📊 Interactive Flowchart (Mermaid)
 ```mermaid
-graph TD
-    Client[Web / Mobile Clients] -->|HTTPS REST API| LB[Load Balancer / Nginx]
-    LB --> API[API Gateway / Express Server]
+flowchart TD
+    Client["Web and Mobile Clients"] -->|HTTPS REST API| LB["Load Balancer / Nginx"]
+    LB --> API["API Gateway / Express Server"]
     
-    subgroup Auth & Middleware
-        API --> AuthMW[JWT Auth Middleware]
-        AuthMW --> ValMW[DTO Validation Middleware]
+    subgraph Auth_Middleware ["Auth and Middleware"]
+        API --> AuthMW["JWT Auth Middleware"]
+        AuthMW --> ValMW["DTO Validation Middleware"]
     end
     
-    ValMW --> ModMono[Modular Monolith Core]
+    ValMW --> ModMono["Modular Monolith Core"]
     
-    subgraph Modular Monolith Core
-        UserMod[User Module]
-        TweetMod[Tweet Module]
-        FeedMod[Feed Module]
-        SocialMod[Follow / Social Module]
+    subgraph Monolith_Core ["Modular Monolith Core"]
+        UserMod["User Module"]
+        TweetMod["Tweet Module"]
+        FeedMod["Feed Module"]
+        SocialMod["Follow and Social Module"]
     end
     
-    ModMono -->|Read/Write ACID| DB[(PostgreSQL Master)]
-    ModMono -->|Read Replicas| DBRep[(PostgreSQL Replicas)]
-    ModMono -->|Session / Feed Cache| Redis[(Redis Cluster)]
-    ModMono -->|Publish Events| Kafka[Apache Kafka Brokers]
+    ModMono -->|Read/Write ACID| DB[("PostgreSQL Master")]
+    ModMono -->|Read Replicas| DBRep[("PostgreSQL Replicas")]
+    ModMono -->|Session / Feed Cache| Redis[("Redis Cluster")]
+    ModMono -->|Publish Events| Kafka["Apache Kafka Brokers"]
     
-    subgraph Asynchronous Workers
-        Kafka --> NotifSvc[Notification Worker]
-        Kafka --> FeedWorker[Fan-out Feed Worker]
-        Kafka --> AnalyticsSvc[Analytics Worker]
+    subgraph Async_Workers ["Asynchronous Workers"]
+        Kafka --> NotifSvc["Notification Worker"]
+        Kafka --> FeedWorker["Fan-out Feed Worker"]
+        Kafka --> AnalyticsSvc["Analytics Worker"]
     end
     
-    NotifSvc -->|Push/Email| Users[User Devices]
+    NotifSvc -->|Push and Email| Users["User Devices"]
     FeedWorker -->|Update Timeline Cache| Redis
 ```
 
