@@ -7,6 +7,7 @@ import httpLogger from './common/logger/httpLogger';
 import userRoutes from "./modules/user/user.routes";
 import { errorHandler } from './common/middleware/error.middleware';
 import authRoutes from './modules/auth/auth.routes';
+import tweetRoutes from './modules/tweet/tweet.routes';
 
 
 
@@ -46,5 +47,7 @@ app.use(errorHandler);
 app.use("/api/v1/auth", authRoutes);
 
 app.use(errorHandler);
+
+app.use("/api/v1/tweets", tweetRoutes);
 
 export default app;
