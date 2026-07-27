@@ -9,6 +9,7 @@ const envSchema = z.object({
   LOG_LEVEL: z.string().default('info'),
   JWT_SECRET: z.string().min(1),
   JWT_EXPIRES_IN: z.string(),
+  DATABASE_URL: z.string(),
 });
 
 const parsed = envSchema.safeParse(process.env);
