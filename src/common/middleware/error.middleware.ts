@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 import { AppError } from "../errors/app-error";
+import multer from "multer";
 
 export function errorHandler(
   err: Error,
@@ -11,6 +12,13 @@ export function errorHandler(
     return res.status(err.statusCode).json({
       success: false,
       message: err.message,
+    });
+  }
+
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({
+      success: false,
+      message: `File upload error: ${err.message}`,
     });
   }
 

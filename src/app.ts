@@ -12,6 +12,11 @@ import followRoutes from './modules/follow/follow.routes';
 import likeRoutes from './modules/like/like.routes';
 import feedRoutes from './modules/feed/feed.routes';
 import commentRoutes from './modules/comment/comment.routes';
+import searchRoutes from './modules/search/search.routes';
+import notificationRoutes from './modules/notification/notification.routes';
+import mediaRoutes from './modules/media/media.routes';
+import retweetRoutes from './modules/retweet/retweet.routes';
+import hashtagRoutes from './modules/hashtag/hashtag.routes';
 
 
 
@@ -46,8 +51,6 @@ app.get('/health', (_req, res) => {
 
 app.use("/api/v1/users", userRoutes);
 
-app.use(errorHandler);
-
 app.use("/api/v1/auth", authRoutes);
 
 app.use("/api/v1/tweets", tweetRoutes);
@@ -56,9 +59,19 @@ app.use("/api/v1/tweets", tweetRoutes);
 app.use("/api/v1/users", followRoutes);
 
 app.use("/api/v1/tweets", likeRoutes);
+app.use("/api/v1/tweets", retweetRoutes);
 
 app.use("/api/v1/feed", feedRoutes);
 
 app.use("/api/v1", commentRoutes);
+
+app.use("/api/v1/search", searchRoutes);
+
+app.use("/api/v1/notifications", notificationRoutes);
+
+app.use("/api/v1/media", mediaRoutes);
+app.use("/api/v1/hashtags", hashtagRoutes);
+
+app.use(errorHandler);
 
 export default app;

@@ -12,46 +12,53 @@ datasource db {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  username     String   @unique
-  email        String   @unique
+  id           String  @id @default(cuid())
+  username     String  @unique
+  email        String  @unique
   password     String
   bio          String?
   profileImage String?
 
-  tweets       Tweet[]
-  likes        Like[]
-
-  followers    Follow[] @relation("Followers")
-  following    Follow[] @relation("Following")
-
-  comments     Comment[]
-
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-}
-
-model Tweet {
-  id        String   @id @default(cuid())
-  content   String
-
-  authorId String
-  author   User @relation(fields:[authorId], references:[id])
-
-  likes    Like[]
-
+  tweets   Tweet[]
   comments Comment[]
+  likes    Like[]
+  retweets Retweet[]
+
+  followers Follow[] @relation("Followers")
+  following Follow[] @relation("Following")
+
+  notificationsReceived Notification[] @relation("NotificationRecipient")
+  notificationsSent     Notification[] @relation("NotificationActor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+model Tweet {
+  id      String @id @default(cuid())
+  content String
+
+  authorId String
+  author   User   @relation(fields: [authorId], references: [id])
+
+  likes    Like[]
+  comments Comment[]
+  retweets Retweet[]
+
+  notifications Notification[]
+
+  media Media[]
+  hashtags TweetHashtag[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
 
 model Follow {
-  followerId String
+  followerId  String
   followingId String
 
-  follower User @relation("Following", fields: [followerId], references: [id])
+  follower  User @relation("Following", fields: [followerId], references: [id])
   following User @relation("Followers", fields: [followingId], references: [id])
 
   createdAt DateTime @default(now())
@@ -71,8 +78,20 @@ model Like {
   @@id([userId, tweetId])
 }
 
+model Retweet {
+  userId  String
+  tweetId String
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tweet Tweet @relation(fields: [tweetId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, tweetId])
+}
+
 model Comment {
-  id      String @id @default(cuid())
+  id String @id @default(cuid())
 
   content String
 
@@ -84,4 +103,65 @@ model Comment {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+enum NotificationType {
+  FOLLOW
+  LIKE
+  COMMENT
+}
+
+model Notification {
+  id String @id @default(cuid())
+
+  type NotificationType
+
+  recipientId String
+  actorId     String
+  tweetId     String?
+
+  isRead Boolean @default(false)
+
+  recipient User   @relation("NotificationRecipient", fields: [recipientId], references: [id])
+  actor     User   @relation("NotificationActor", fields: [actorId], references: [id])
+  tweet     Tweet? @relation(fields: [tweetId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+model Media {
+  id String @id @default(cuid())
+
+  url      String
+  publicId String
+  type     MediaType
+
+  tweetId String
+  tweet   Tweet  @relation(fields: [tweetId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+model Hashtag {
+  id        String @id @default(cuid())
+  name      String @unique
+
+  tweets    TweetHashtag[]
+
+  createdAt DateTime @default(now())
+}
+
+model TweetHashtag {
+  tweetId   String
+  hashtagId String
+
+  tweet      Tweet @relation(fields: [tweetId], references: [id], onDelete: Cascade)
+  hashtag    Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@id([tweetId, hashtagId])
 }
