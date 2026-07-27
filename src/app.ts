@@ -8,6 +8,10 @@ import userRoutes from "./modules/user/user.routes";
 import { errorHandler } from './common/middleware/error.middleware';
 import authRoutes from './modules/auth/auth.routes';
 import tweetRoutes from './modules/tweet/tweet.routes';
+import followRoutes from './modules/follow/follow.routes';
+import likeRoutes from './modules/like/like.routes';
+import feedRoutes from './modules/feed/feed.routes';
+import commentRoutes from './modules/comment/comment.routes';
 
 
 
@@ -46,8 +50,15 @@ app.use(errorHandler);
 
 app.use("/api/v1/auth", authRoutes);
 
-app.use(errorHandler);
-
 app.use("/api/v1/tweets", tweetRoutes);
+
+
+app.use("/api/v1/users", followRoutes);
+
+app.use("/api/v1/tweets", likeRoutes);
+
+app.use("/api/v1/feed", feedRoutes);
+
+app.use("/api/v1", commentRoutes);
 
 export default app;

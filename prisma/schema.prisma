@@ -20,6 +20,12 @@ model User {
   profileImage String?
 
   tweets       Tweet[]
+  likes        Like[]
+
+  followers    Follow[] @relation("Followers")
+  following    Follow[] @relation("Following")
+
+  comments     Comment[]
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -27,12 +33,54 @@ model User {
 
 model Tweet {
   id        String   @id @default(cuid())
-
   content   String
 
-  authorId  String
+  authorId String
+  author   User @relation(fields:[authorId], references:[id])
 
-  author    User @relation(fields: [authorId], references: [id])
+  likes    Like[]
+
+  comments Comment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+
+model Follow {
+  followerId String
+  followingId String
+
+  follower User @relation("Following", fields: [followerId], references: [id])
+  following User @relation("Followers", fields: [followingId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@id([followerId, followingId])
+}
+
+model Like {
+  userId  String
+  tweetId String
+
+  user  User  @relation(fields: [userId], references: [id])
+  tweet Tweet @relation(fields: [tweetId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@id([userId, tweetId])
+}
+
+model Comment {
+  id      String @id @default(cuid())
+
+  content String
+
+  userId  String
+  tweetId String
+
+  user  User  @relation(fields: [userId], references: [id])
+  tweet Tweet @relation(fields: [tweetId], references: [id])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
