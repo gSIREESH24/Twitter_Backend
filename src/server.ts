@@ -1,8 +1,7 @@
 import app from './app';
 import logger from './common/logger/logger';
+import { env } from './config';
 
-const PORT = Number(process.env.PORT) || 3000;
-
-app.listen(PORT, () => {
-  logger.info(`🚀 Server running on http://localhost:${PORT}`);
+app.listen(env.PORT, () => {
+  logger.info(`🚀 Server started on port ${env.PORT}`);
 });

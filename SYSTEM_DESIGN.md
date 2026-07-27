@@ -1,153 +1,233 @@
-# 📐 Master System Design Blueprint
+# 📐 System Design Master Blueprint
 
-Welcome to the Master Blueprint for the Twitter Backend! This document gives you the **big picture** of how our entire backend is architected in a clean, simple, and high-level way.
-
----
-
-## 1. The Big Picture: How Everything Connects
-
-When 1 Million users open Twitter every day, they expect instant timelines, quick likes, and reliable notifications. Here is how our backend storage and compute tools work together to make that happen:
-
-```
-[ 📱 Client Apps ] (iOS, Android, Web)
-         │
-         ├─── 1. Static Images / Avatars ───► [ CloudFront CDN ] ───► [ AWS S3 Object Storage ]
-         │
-         └─── 2. API Requests ─────────────► [ Load Balancer ]
-                                                    │
-                                                    ▼ (Round-Robin Traffic)
-                                           [ Express API Servers ]
-                                           (Stateless App Nodes)
-                                                    │
-             ┌──────────────────────────────────────┼──────────────────────────────────────┐
-             │                                      │                                      │
-  (Permanent │ Data Storage)            (Instant Hot│Feeds & Sessions)    (Background Event│Bus)
-             ▼                                      ▼                                      ▼
-┌──────────────────────────┐             ┌─────────────────────┐             ┌───────────────────┐
-│  PostgreSQL Relational   │             │ Redis Cache Cluster │             │   Apache Kafka    │
-│  Master & Read Replicas  │             │ (In-Memory Storage) │             │  Event Brokers    │
-└──────────────────────────┘             └──────────▲──────────┘             └─────────┬─────────┘
-                                                    │                                  │
-                                                    │ (Push Feed IDs)                  ▼
-                                         ┌─────────────────────┐             ┌───────────────────┐
-                                         │ Timeline Feed Worker│◄────────────┤ Notification Push │
-                                         └─────────────────────┘             │ Background Workers│
-                                                                             └───────────────────┘
-```
-
-### 🧰 Why We Chose Each Tool
-
-- **Node.js & Express**: Fast, lightweight, and perfect for handling thousands of concurrent user connections.
-- **PostgreSQL (The Permanent Vault)**: Stores relational data like user profiles, tweets, follows, and comments safely with strict ACID guarantees (so data is never lost or corrupted).
-- **Redis (The Lightning Cache)**: Holds user sessions and pre-computed home timelines in RAM so feeds load in under 5 milliseconds!
-- **Apache Kafka (The Asynchronous Messenger)**: When a celebrity tweets, Kafka takes over behind the scenes to update millions of follower timelines and send notifications without freezing the web server.
+This document serves as the **Master Blueprint** for the Twitter Backend System. It summarizes the core architectural decisions, data models, API contracts, low-level design layers, and security mechanisms across Chapters 1 through 9.
 
 ---
 
-## 2. The Request Pipeline: One Job Per Layer
+## 1. Executive Summary
 
-Imagine passing a bucket down a fire brigade line. In our backend, every incoming HTTP request travels through a strict, 4-step assembly line. **Every layer has exactly ONE job**:
+Our goal is to build a high-performance, scalable social media backend capable of handling **1 Million Daily Active Users (DAU)** and generating **5 Million new tweets per day** with low-latency home feed generation and real-time engagement tracking.
+
+### Core Architectural Decisions
+*   **Architecture Pattern**: Layered Modular Monolith (evolving to Microservices).
+*   **Primary Database**: PostgreSQL (for strict schema, ACID compliance, and complex join capabilities).
+*   **Caching Layer**: Redis (for hot feeds, user sessions, and rate limiting).
+*   **Asynchronous Messaging**: Apache Kafka (for decoupling notification delivery, feed fan-out, and analytics).
+*   **Authentication**: Stateless JWT Access Tokens (15-minute expiry) paired with secure Refresh Tokens (30-day expiry).
+
+---
+
+## 2. Request Lifecycle Pipeline
+
+Every incoming HTTP request traverses a strict, unidirectional pipeline. Each layer performs a single, well-defined responsibility:
 
 ```
-[ Incoming Request: POST /tweets ]
-               │
-               ▼
+[ Client Request ]
+       │
+       ▼
 ┌────────────────────────────────────────────────────────┐
 │ 1. Express Router                                      │
-│    👉 The Traffic Cop: "Which controller handles this?"│
+│    └─► Identifies endpoint & routes to handler         │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│ 2. Controller Layer                                    │
-│    👉 The Receptionist: Reads user input, calls the    │
-│       service, and sends back the HTTP JSON response.  │
+│ 2. Authentication Middleware                           │
+│    └─► Verifies JWT Bearer token & attaches req.user   │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│ 3. Service Layer (Business Logic)                      │
-│    👉 The Brain: Checks rules ("Is content not empty?  │
-│       Is user banned?") and makes decisions.           │
+│ 3. Validation Middleware                               │
+│    └─► Validates DTOs (body, query, params) via Zod    │
 └──────────────────────────┬─────────────────────────────┘
                            │
                            ▼
 ┌────────────────────────────────────────────────────────┐
-│ 4. Repository Layer                                    │
-│    👉 The Librarian: Talks directly to PostgreSQL      │
-│       (INSERT, SELECT, UPDATE, DELETE).                │
-└────────────────────────────────────────────────────────┘
+│ 4. Controller Layer                                    │
+│    └─► Extracts HTTP input & invokes Service           │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ 5. Service Layer (Business Logic)                      │
+│    └─► Executes domain rules & coordinates modules     │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ 6. Repository Layer                                    │
+│    └─► Executes parameterized SQL against PostgreSQL   │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+                           ▼
+[ Formatted HTTP Response ]
 ```
-
-> 💡 **Why do we do this?** If we mixed everything together in one file, changing our database from PostgreSQL to MongoDB later would require rewriting our entire business logic! By keeping layers separate, testing and maintaining code becomes effortless.
 
 ---
 
-## 3. Core Domain Entities (What We Store)
+## 3. High-Level Architecture Component Map
 
-Our social network revolves around **7 core concepts**. Here is a high-level look at how they connect:
+### 🏛️ ASCII Architecture Topology
+```
+[ Web / Mobile Clients ]
+         │
+         ▼ (HTTPS / REST API)
+[ Load Balancer / Nginx ]
+         │
+         ▼
+[ API Gateway / Express ]
+         │
+         ▼
+┌──────────────────────────────────────────────┐
+│ Auth and Middleware Pipeline                 │
+│  ├── 1. JWT Auth Middleware                  │
+│  └── 2. DTO Validation Middleware (Zod)      │
+└──────────────────────┬───────────────────────┘
+                       │
+                       ▼
+┌──────────────────────────────────────────────┐
+│ Modular Monolith Core                        │
+│  ├── User Module       ├── Tweet Module      │
+│  ├── Feed Module       └── Follow Module     │
+└──────┬──────────┬───────────┬─────────┬──────┘
+       │          │           │         │
+ (ACID │   (Read  │  (Session │         │ (Publish Events)
+ Write)│  Replicas)│   / Feed) │         │
+       ▼          ▼           ▼         ▼
+┌──────────┐ ┌──────────┐ ┌───────┐ ┌───────────────┐
+│PostgreSQL│ │PostgreSQL│ │ Redis │ │ Apache Kafka  │
+│  Master  │ │ Replicas │ │Cluster│ │ Event Brokers │
+└──────────┘ └──────────┘ └───────┘ └───────┬───────┘
+                                            │
+               ┌────────────────────────────┼────────────────────────────┐
+               ▼                            ▼                            ▼
+   ┌───────────────────────┐    ┌───────────────────────┐    ┌───────────────────────┐
+   │  Notification Worker  │    │  Timeline Feed Worker │    │    Analytics Worker   │
+   └───────────┬───────────┘    └───────────┬───────────┘    └───────────────────────┘
+               │                            │
+               ▼                            ▼
+      [ User Devices ]           [ Update Redis Feed ]
+```
 
+### 📊 Interactive Flowchart (Mermaid)
 ```mermaid
-flowchart LR
-    User["👤 USER"] -->|publishes| Tweet["📝 TWEET"]
-    User -->|follows| User
-    User -->|likes| Like["❤️ LIKE"]
-    User -->|writes| Comment["💬 COMMENT"]
-
-    Tweet -->|receives| Like
-    Tweet -->|has| Comment
-    Tweet -->|contains| Media["🖼️ MEDIA"]
-    Tweet -->|triggers| Notif["🔔 NOTIFICATION"]
+flowchart TD
+    Client["Web and Mobile Clients"] -->|HTTPS REST API| LB["Load Balancer / Nginx"]
+    LB --> API["API Gateway / Express Server"]
+    
+    subgraph Auth_Middleware ["Auth and Middleware"]
+        API --> AuthMW["JWT Auth Middleware"]
+        AuthMW --> ValMW["DTO Validation Middleware"]
+    end
+    
+    ValMW --> ModMono["Modular Monolith Core"]
+    
+    subgraph Monolith_Core ["Modular Monolith Core"]
+        UserMod["User Module"]
+        TweetMod["Tweet Module"]
+        FeedMod["Feed Module"]
+        SocialMod["Follow and Social Module"]
+    end
+    
+    ModMono -->|Read/Write ACID| DB[("PostgreSQL Master")]
+    ModMono -->|Read Replicas| DBRep[("PostgreSQL Replicas")]
+    ModMono -->|Session / Feed Cache| Redis[("Redis Cluster")]
+    ModMono -->|Publish Events| Kafka["Apache Kafka Brokers"]
+    
+    subgraph Async_Workers ["Asynchronous Workers"]
+        Kafka --> NotifSvc["Notification Worker"]
+        Kafka --> FeedWorker["Fan-out Feed Worker"]
+        Kafka --> AnalyticsSvc["Analytics Worker"]
+    end
+    
+    NotifSvc -->|Push and Email| Users["User Devices"]
+    FeedWorker -->|Update Timeline Cache| Redis
 ```
 
-- **User**: An account with an email, username, hashed password, bio, and profile avatar.
-- **Tweet**: A short message ($\le 280$ characters) published by a user.
-- **Follow**: A one-way link between a _Follower_ and the account they are _Following_.
-- **Like**: An affirmative interaction linking a User to a Tweet.
-- **Comment**: A threaded reply attached to a parent Tweet.
-- **Notification**: An alert informing a user that someone followed them, liked their tweet, or replied.
-- **Media**: An image or graphic stored in AWS S3 and linked to a tweet.
+---
+
+## 4. Domain & Data Relationship Overview
+
+The core domain revolves around 7 primary entities. Below is the Entity Relationship summary:
+
+| Entity | Primary Key | Critical Indexes | Relationships |
+| :--- | :--- | :--- | :--- |
+| **`users`** | `id` (UUID) | `email` (UNIQUE), `username` (UNIQUE) | Has many Tweets, Comments, Likes, Follows, Notifications. |
+| **`tweets`** | `id` (UUID) | `(user_id, created_at DESC)` | Belongs to User; Has many Comments, Likes, Media. |
+| **`follows`** | `(follower_id, following_id)` | `follower_id`, `following_id` | Many-to-Many mapping between Users. |
+| **`likes`** | `(user_id, tweet_id)` | `user_id`, `tweet_id` | Many-to-Many mapping between Users and Tweets. |
+| **`comments`** | `id` (UUID) | `tweet_id`, `user_id` | Belongs to User and Tweet. |
+| **`notifications`** | `id` (UUID) | `(user_id, is_read, created_at DESC)` | Belongs to receiving User; references target entity. |
+| **`media`** | `id` (UUID) | `tweet_id` | Belongs to Tweet. |
 
 ---
 
-## 4. API Endpoints Summary
+## 5. API Endpoint Summary Matrix
 
-Here is a high-level cheat sheet of our core RESTful API endpoints:
-
-| Feature Area |  Method  | Endpoint URL               | Who Can Access? | What Does It Do?                                   |
-| :----------- | :------: | :------------------------- | :-------------: | :------------------------------------------------- |
-| **Auth**     |  `POST`  | `/api/v1/auth/signup`      |     Public      | Create a new account and get login tokens.         |
-| **Auth**     |  `POST`  | `/api/v1/auth/login`       |     Public      | Log in with email/password and get JWT tokens.     |
-| **Users**    |  `GET`   | `/api/v1/users/:username`  |     Public      | View anyone's public profile and follower count.   |
-| **Tweets**   |  `POST`  | `/api/v1/tweets`           |    Logged In    | Publish a new tweet with optional image links.     |
-| **Tweets**   | `DELETE` | `/api/v1/tweets/:id`       |   Tweet Owner   | Delete your own tweet.                             |
-| **Feeds**    |  `GET`   | `/api/v1/feed/home`        |    Logged In    | Get your personalized home timeline (fast scroll). |
-| **Social**   |  `POST`  | `/api/v1/users/:id/follow` |    Logged In    | Follow a target user account.                      |
-| **Social**   | `DELETE` | `/api/v1/users/:id/follow` |    Logged In    | Unfollow a target user account.                    |
-
----
-
-## 5. Security & Authentication Overview
-
-How does the server know who you are without making you log in on every single button click?
-
-1. **No Plaintext Passwords**: We never store actual passwords in the database. We use **Argon2 / bcrypt** to turn your password into an unreadable cryptographic hash (`$2b$12$e9k...`). Even if a hacker steals the database, they cannot read your password!
-2. **Stateless JWT Tokens**: When you log in, the server gives you a digital badge called a **JSON Web Token (JWT)**.
-3. **Every Request**: When you click "Like Tweet", your app sends this JWT badge in the request header. Our security middleware checks the badge signature and says: _"Ah, this is User #101! Let them pass."_
-4. **Token Rotation**: To keep you super safe, your Access Badge expires every **15 minutes**. A secure, hidden **Refresh Cookie** automatically gets you a new badge in the background without bothering you!
+| Module | HTTP Method | Endpoint Path | Authentication | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| **Auth** | `POST` | `/api/v1/auth/signup` | Public | Register new user account. |
+| **Auth** | `POST` | `/api/v1/auth/login` | Public | Authenticate user & return JWT tokens. |
+| **Auth** | `POST` | `/api/v1/auth/refresh` | Public | Renew expired Access Token via Refresh Token. |
+| **User** | `GET` | `/api/v1/users/:username` | Optional | Retrieve public user profile. |
+| **User** | `PATCH` | `/api/v1/users/me` | Bearer JWT | Update authenticated user profile. |
+| **Tweet** | `POST` | `/api/v1/tweets` | Bearer JWT | Publish a new tweet. |
+| **Tweet** | `GET` | `/api/v1/tweets/:id` | Optional | View single tweet with metadata. |
+| **Tweet** | `DELETE` | `/api/v1/tweets/:id` | Bearer JWT (Owner)| Delete a published tweet. |
+| **Feed** | `GET` | `/api/v1/feed/home` | Bearer JWT | Fetch personalized timeline (cursor paginated). |
+| **Social** | `POST` | `/api/v1/users/:id/follow` | Bearer JWT | Follow a target user. |
+| **Social** | `DELETE`| `/api/v1/users/:id/follow` | Bearer JWT | Unfollow a target user. |
 
 ---
 
-## 6. Explore the Detailed Chapters
+## 6. Directory & Module Blueprint
 
-Want to dive deeper into any specific topic? Check out our 9 easy-to-read guides in the `docs/` folder:
+We organize files **by feature (domain)** rather than by technical layer. This feature-based organization ensures cohesion and makes future extraction into microservices seamless:
+
+```
+src/
+├── config/              # Centralized environment & infrastructure configs
+│   ├── database.ts      # PostgreSQL connection pool setup
+│   ├── redis.ts         # Redis client configuration
+│   └── kafka.ts         # Kafka producer/consumer setup
+├── common/              # Shared cross-cutting components
+│   ├── logger/          # Structured logging utility (Winston)
+│   ├── middleware/      # JWT auth, error handler, request logger
+│   ├── errors/          # Custom AppError classes & HTTP status codes
+│   └── utils/           # Helper functions (hashing, pagination formatting)
+├── modules/             # Feature domain modules
+│   ├── user/
+│   │   ├── user.controller.ts
+│   │   ├── user.service.ts
+│   │   ├── user.repository.ts
+│   │   ├── user.routes.ts
+│   │   └── user.dto.ts
+│   ├── tweet/
+│   │   ├── tweet.controller.ts
+│   │   ├── tweet.service.ts
+│   │   ├── tweet.repository.ts
+│   │   ├── tweet.routes.ts
+│   │   └── tweet.dto.ts
+│   ├── follow/
+│   ├── comment/
+│   └── notification/
+├── app.ts               # Express app setup, global middleware & routing
+└── server.ts            # HTTP server startup, DB connections & graceful shutdown
+```
+
+---
+
+## 7. Next Steps & Detailed Chapters
+
+For comprehensive, chapter-by-chapter breakdowns of every architectural decision, refer to the documentation suite in the `docs/` folder:
 
 1. [**01. Problem Statement & Scope**](./docs/01-problem-statement-and-scope.md)
 2. [**02. Requirement Analysis & Scale Estimation**](./docs/02-requirement-analysis-and-scale.md)
-3. [**03. High-Level Architecture (HLA)**](./docs/03-high-level-architecture.md)
+3. [**03. High-Level Architecture**](./docs/03-high-level-architecture.md)
 4. [**04. Domain Modeling**](./docs/04-domain-modeling.md)
-5. [**05. Database Design**](./docs/05-database-design.md)
-6. [**06. API Design & REST Specs**](./docs/06-api-design.md)
-7. [**07. Software Layers (LLD)**](./docs/07-low-level-design.md)
+5. [**05. Database Design & SQL Schema**](./docs/05-database-design.md)
+6. [**06. API Design & REST Specifications**](./docs/06-api-design.md)
+7. [**07. Low-Level Design (LLD)**](./docs/07-low-level-design.md)
 8. [**08. Authentication & Security System**](./docs/08-authentication-system.md)
 9. [**09. Development & Scaling Strategy**](./docs/09-development-and-scaling-strategy.md)

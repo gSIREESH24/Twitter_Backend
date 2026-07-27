@@ -4,6 +4,10 @@ import helmet from 'helmet';
 import compression from 'compression';
 
 import httpLogger from './common/logger/httpLogger';
+import userRoutes from "./modules/user/user.routes";
+import { errorHandler } from './common/middleware/error.middleware';
+import authRoutes from './modules/auth/auth.routes';
+
 
 
 const app = express();
@@ -34,5 +38,13 @@ app.get('/health', (_req, res) => {
     message: 'Server is healthy',
   });
 });
+
+app.use("/api/v1/users", userRoutes);
+
+app.use(errorHandler);
+
+app.use("/api/v1/auth", authRoutes);
+
+app.use(errorHandler);
 
 export default app;
