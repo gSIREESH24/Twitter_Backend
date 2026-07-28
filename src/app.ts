@@ -20,7 +20,21 @@ import hashtagRoutes from './modules/hashtag/hashtag.routes';
 
 
 
+import promBundle from 'express-prom-bundle';
+
 const app = express();
+
+// Prometheus Metrics Middleware
+const metricsMiddleware = promBundle({
+  includeMethod: true,
+  includePath: true,
+  includeStatusCode: true,
+  includeUp: true,
+  promClient: {
+    collectDefaultMetrics: {}
+  }
+});
+app.use(metricsMiddleware);
 
 //Logger
 app.use(httpLogger);
