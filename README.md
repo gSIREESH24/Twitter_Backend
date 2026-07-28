@@ -51,6 +51,29 @@ How does a request travel from a user's phone to our database? Here is the simpl
 
 ---
 
+## 🐳 Running with Docker
+
+We have fully containerized the entire infrastructure (PostgreSQL, Redis, Apache Kafka, and the Node.js API). You can spin up the entire backend with a single command!
+
+**1. Start the entire stack (in the background):**
+```bash
+docker compose up --build -d
+```
+
+**2. View the real-time API logs:**
+```bash
+docker logs -f twitter_api
+```
+
+**3. Stop and tear down the stack:**
+```bash
+docker compose down
+```
+
+*(Note: Docker automatically manages persistent volumes, so your database and Kafka events will survive restarts!)*
+
+---
+
 ## 📚 System Design & Architecture Documentation
 
 We have organized the entire system design, architecture principles, requirements, and database schemas into **5 comprehensive, easy-to-read documentation guides**:

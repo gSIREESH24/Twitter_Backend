@@ -11,7 +11,7 @@ export class KafkaEventBus implements EventBus {
   constructor() {
     this.kafka = new Kafka({
       clientId: "twitter-backend",
-      brokers: ["localhost:9092"],
+      brokers: [process.env.KAFKA_BROKER || "localhost:9092"],
       logLevel: logLevel.ERROR,
     });
 
