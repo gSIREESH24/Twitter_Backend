@@ -1,4 +1,4 @@
-# 06 - Redis Architecture & Scaling Patterns
+# 05 - Redis Architecture & Scaling Patterns
 
 This document outlines the various Redis caching and event-driven patterns implemented in the backend architecture to optimize performance, reduce database load, and decouple services.
 

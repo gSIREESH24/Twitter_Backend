@@ -85,13 +85,13 @@ We have organized the entire system design, architecture principles, requirement
 | Doc # | Guide Title | What You Will Learn |
 | :--- | :--- | :--- |
 | **01** | [**System Design Principles Used Till Now**](./docs/01-system-design-principles-used.md) | Details on our Modular Monolith architecture, 4-tier Layered Design (Routes -> Controller -> Service -> Repository), idempotency via composite keys, DRY, and cursor vs. offset pagination. |
-| **02** | [**Pending NFRs & Future Scaling Architecture**](./docs/02-pending-non-functional-requirements-and-scaling.md) | The engineering blueprint for scaling to 10M+ DAU: asynchronous Kafka event fan-out, Redis timeline caching, database sharding & read replicas, rate limiting, and Kubernetes containerization. |
-| **03** | [**Functional & Non-Functional Requirements**](./docs/03-functional-and-non-functional-requirements.md) | The complete breakdown of all 11 functional feature modules and NFR targets (p95 latency <100ms, 99.99% availability, hybrid consistency models, and security hardening). |
-| **04** | [**Database Schema, Relations & ER Diagrams**](./docs/04-database-schema-relations-and-diagrams.md) | In-depth ER explanations, Mermaid relational diagrams, 1:M and M:N junction table breakdowns, and the full production Prisma schema implementation. |
-| **05** | [**Complete API Reference & Usage Guide**](./docs/05-api-reference-and-usage.md) | Full listing of all REST API endpoints, concise 1-word functionality descriptions, auth requirements, and practical usage examples (request body, params, query, response). |
-| **06** | [**Redis Architecture**](./docs/06-redis-architecture.md) | Details on how Redis is used for caching and rate limiting. |
-| **07** | [**Kafka Event Streaming**](./docs/07-kafka-event-streaming.md) | Details on Kafka setup and usage for event-driven architecture. |
-| **08** | [**Monitoring & Observability**](./docs/08-monitoring-observability.md) | Details on the Phase 2 monitoring stack including Prometheus, Grafana, Node.js API instrumentation, cAdvisor, and exporters. |
+| **02** | [**Functional & Non-Functional Requirements**](./docs/02-functional-and-non-functional-requirements.md) | The complete breakdown of all 11 functional feature modules and NFR targets (p95 latency <100ms, 99.99% availability, hybrid consistency models, and security hardening). |
+| **03** | [**Database Schema, Relations & ER Diagrams**](./docs/03-database-schema-relations-and-diagrams.md) | In-depth ER explanations, Mermaid relational diagrams, 1:M and M:N junction table breakdowns, and the full production Prisma schema implementation. |
+| **04** | [**Complete API Reference & Usage Guide**](./docs/04-api-reference-and-usage.md) | Full listing of all REST API endpoints, concise 1-word functionality descriptions, auth requirements, and practical usage examples (request body, params, query, response). |
+| **05** | [**Redis Architecture**](./docs/05-redis-architecture.md) | Details on how Redis is used for caching and rate limiting. |
+| **06** | [**Kafka Event Streaming**](./docs/06-kafka-event-streaming.md) | Details on Kafka setup and usage for event-driven architecture. |
+| **07** | [**Monitoring & Observability**](./docs/07-monitoring-observability.md) | Details on the Phase 2 monitoring stack including Prometheus, Grafana, Node.js API instrumentation, cAdvisor, and exporters. |
+| **08** | [**Master Architecture Portfolio**](./docs/08-master-architecture-portfolio.md) | The ultimate master document chronicling the entire engineering journey, complete with end-to-end architecture diagrams, NFR optimizations, and data relation diagrams. |
 
 ---
 

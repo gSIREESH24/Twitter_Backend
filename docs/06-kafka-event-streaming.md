@@ -1,4 +1,4 @@
-# 07 - Apache Kafka Event Streaming
+# 06 - Apache Kafka Event Streaming
 
 This document details the transition from Redis Pub/Sub to a robust, scalable event-driven architecture powered by **Apache Kafka**.
 
