@@ -9,6 +9,7 @@ export class LikeRepository {
       },
       select: {
         id: true,
+        authorId: true,
       },
     });
   }

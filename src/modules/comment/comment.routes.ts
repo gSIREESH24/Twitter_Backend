@@ -7,6 +7,8 @@ import {
 } from "./comment.validation";
 import { CommentController } from "./comment.controller";
 
+import { rateLimiter } from "../../common/middleware/rate-limit.middleware";
+
 const router = Router();
 
 const commentController =
@@ -15,6 +17,7 @@ const commentController =
 router.post(
   "/tweets/:id/comments",
   authenticate,
+  rateLimiter("comments", 60, 60 / 60),
   validate(createCommentSchema),
   commentController.createComment
 );

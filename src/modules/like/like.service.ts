@@ -1,5 +1,7 @@
 import { AppError } from "../../common/errors/app-error";
 import { LikeRepository } from "./like.repository";
+import redisClient from "../../config/redis";
+import { eventBus } from "../../common/events";
 
 export class LikeService {
 
@@ -42,6 +44,17 @@ export class LikeService {
       userId,
       tweetId
     );
+
+    await redisClient.del(`feed:${userId}`);
+
+    // Don't notify if liking own tweet
+    if (userId !== tweet.authorId) {
+      await eventBus.publish("tweet-liked", { 
+        actorId: userId, 
+        tweetId,
+        recipientId: tweet.authorId
+      });
+    }
   }
 
   async unlikeTweet(
@@ -72,6 +85,9 @@ export class LikeService {
         userId,
         tweetId
     );
+
+    await redisClient.del(`feed:${userId}`);
+    await eventBus.publish("tweet-unliked", { actorId: userId, tweetId });
     }
 
     async getLikes(

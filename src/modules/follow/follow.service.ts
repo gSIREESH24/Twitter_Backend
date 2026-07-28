@@ -1,5 +1,7 @@
 import { AppError } from "../../common/errors/app-error";
 import { FollowRepository } from "./follow.repository";
+import redisClient from "../../config/redis";
+import { eventBus } from "../../common/events";
 
 export class FollowService {
   constructor(
@@ -50,6 +52,9 @@ export class FollowService {
       followerId,
       followingId
     );
+
+    await redisClient.del(`feed:${followerId}`);
+    await eventBus.publish("user-followed", { followerId, followingId });
   }
 
   async unfollowUser(
@@ -92,6 +97,9 @@ export class FollowService {
         followerId,
         followingId
     );
+
+    await redisClient.del(`feed:${followerId}`);
+    await eventBus.publish("user-unfollowed", { followerId, followingId });
     }
 
     async getFollowers(

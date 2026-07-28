@@ -2,6 +2,8 @@ import { Router } from "express";
 import { authenticate } from "../../common/middleware/auth.middleware";
 import { LikeController } from "./like.controller";
 
+import { rateLimiter } from "../../common/middleware/rate-limit.middleware";
+
 const router = Router();
 
 const likeController =
@@ -10,6 +12,7 @@ const likeController =
 router.post(
   "/:id/like",
   authenticate,
+  rateLimiter("likes", 200, 200 / 60),
   likeController.likeTweet
 );
 

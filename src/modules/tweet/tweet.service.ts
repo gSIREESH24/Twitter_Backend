@@ -3,6 +3,8 @@ import { TweetRepository } from "./tweet.repository";
 import { CreateTweetDto, UpdateTweetDto } from "./tweet.validation";
 import { AppError } from "../../common/errors/app-error";
 import { extractHashtags } from "../../common/utils/hashtag";
+import redisClient from "../../config/redis";
+import { eventBus } from "../../common/events";
 
 export class TweetService {
   private readonly tweetRepository = new TweetRepository();
@@ -10,7 +12,7 @@ export class TweetService {
   async createTweet(userId: string, data: CreateTweetDto) {
     const tags = extractHashtags(data.content);
 
-    return this.tweetRepository.create({
+    const tweet = await this.tweetRepository.create({
       ...data,
       author: {
         connect: {
@@ -28,16 +30,40 @@ export class TweetService {
         })),
       },
     });
+
+    const uniqueHashtags = [...new Set(tags)];
+    for (const hashtag of uniqueHashtags) {
+      await redisClient.zIncrBy("trending:hashtags", 1, hashtag);
+    }
+
+    await redisClient.del(`feed:${userId}`);
+    await eventBus.publish("tweet-created", { authorId: userId, tweetId: tweet.id });
+
+    return tweet;
   }
 
   async getTweet(id: string) {
+    const cacheKey = `tweet:${id}`;
+
+    const cachedTweet = await redisClient.get(cacheKey);
+
+    if (cachedTweet) {
+        return JSON.parse(cachedTweet);
+    }
     const tweet = await this.tweetRepository.findById(id);
 
     if (!tweet) {
       throw new AppError(404, "Tweet not found");
     }
 
+    await redisClient.setEx(
+        cacheKey,
+        300,
+        JSON.stringify(tweet)
+    );
+
     return tweet;
+
   }
 
   async updateTweet(
@@ -60,11 +86,15 @@ export class TweetService {
 
     const tags = extractHashtags(data.content);
 
+    await redisClient.del(`tweet:${tweetId}`);
+    await redisClient.del(`feed:${userId}`);
+
     return this.tweetRepository.update(
       tweetId,
       data.content,
       tags
     );
+
   }
 
   async deleteTweet(tweetId: string, userId: string) {
@@ -82,6 +112,10 @@ export class TweetService {
     }
 
     await this.tweetRepository.delete(tweetId);
+
+    await redisClient.del(`tweet:${tweetId}`);
+    await redisClient.del(`feed:${userId}`);
+    await eventBus.publish("tweet-deleted", { authorId: userId, tweetId });
   }
 
   async getUserTweets(

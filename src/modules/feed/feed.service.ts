@@ -1,5 +1,6 @@
 import { FeedRepository } from "./feed.repository";
 import { AppError } from "../../common/errors/app-error";
+import redisClient from "../../config/redis";
 
 export class FeedService {
 
@@ -9,41 +10,47 @@ export class FeedService {
   ) {}
 
   async getFeed(
-  userId: string,
-  cursor: string | undefined,
-  limit: number
-) {
+    userId: string,
+    cursor: string | undefined,
+    limit: number
+  ) {
+    const cacheKey = `feed:${userId}`;
 
-  const tweets =
-    await this.feedRepository.getFeed(
-      userId,
-      cursor,
-      limit
-    );
+    // Only hit cache for the first page
+    if (!cursor) {
+      const cachedFeed = await redisClient.get(cacheKey);
+      if (cachedFeed) {
+        return JSON.parse(cachedFeed);
+      }
+    }
 
-  return tweets.map((tweet) => ({
+    const tweets =
+      await this.feedRepository.getFeed(
+        userId,
+        cursor,
+        limit
+      );
 
-    id: tweet.id,
+    const formattedTweets = tweets.map((tweet) => ({
+      id: tweet.id,
+      content: tweet.content,
+      createdAt: tweet.createdAt,
+      updatedAt: tweet.updatedAt,
+      author: tweet.author,
+      likeCount: tweet._count.likes,
+      commentCount: tweet._count.comments,
+      isLiked: tweet.likes.some(
+        (like) => like.userId === userId
+      ),
+    }));
 
-    content: tweet.content,
+    if (!cursor) {
+      // Cache for 60 seconds (Fan-out on Read TTL)
+      await redisClient.setEx(cacheKey, 60, JSON.stringify(formattedTweets));
+    }
 
-    createdAt: tweet.createdAt,
-
-    updatedAt: tweet.updatedAt,
-
-    author: tweet.author,
-
-    likeCount: tweet._count.likes,
-
-    commentCount: tweet._count.comments,
-
-    isLiked: tweet.likes.some(
-      (like) => like.userId === userId
-    ),
-
-  }));
-
-}
+    return formattedTweets;
+  }
 
 async getDiscoverFeed(
   userId: string,

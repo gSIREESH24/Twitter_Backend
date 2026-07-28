@@ -1,4 +1,5 @@
 import { prisma } from "../../config/database";
+import redisClient from "../../config/redis";
 import { hashtagTweetSelect } from "./hashtag.select";
 
 export class HashtagRepository {
@@ -32,19 +33,15 @@ export class HashtagRepository {
     });
   }
 
-  async getTrendingHashtags(limit: number = 10) {
+  async rebuildTrendingCache() {
     const trending = await prisma.tweetHashtag.groupBy({
       by: ["hashtagId"],
       _count: {
         tweetId: true,
       },
-      orderBy: {
-        _count: {
-          tweetId: "desc",
-        },
-      },
-      take: limit,
     });
+
+    if (trending.length === 0) return;
 
     const hashtagIds = trending.map((item) => item.hashtagId);
 
@@ -62,12 +59,45 @@ export class HashtagRepository {
 
     const hashtagMap = new Map(hashtags.map((h) => [h.id, h.name]));
 
-    return trending
-      .map((item) => ({
-        name: hashtagMap.get(item.hashtagId) ?? "",
-        count: item._count.tweetId,
-      }))
-      .filter((item) => item.name !== "");
+    const redisData = trending
+      .map((item) => {
+        const name = hashtagMap.get(item.hashtagId);
+        return name ? { score: item._count.tweetId, value: name } : null;
+      })
+      .filter((item): item is { score: number; value: string } => item !== null);
+
+    if (redisData.length > 0) {
+      await redisClient.del("trending:hashtags");
+      await redisClient.zAdd("trending:hashtags", redisData);
+    }
+  }
+
+  async getTrendingHashtags(limit: number = 10) {
+    let trending = await redisClient.zRangeWithScores(
+      "trending:hashtags",
+      0,
+      limit - 1,
+      {
+        REV: true,
+      }
+    );
+
+    if (trending.length === 0) {
+      await this.rebuildTrendingCache();
+      trending = await redisClient.zRangeWithScores(
+        "trending:hashtags",
+        0,
+        limit - 1,
+        {
+          REV: true,
+        }
+      );
+    }
+
+    return trending.map((item) => ({
+      name: item.value,
+      count: item.score,
+    }));
   }
 
   async getAllHashtags(query?: string, limit: number = 20) {
