@@ -22,8 +22,8 @@ Think of this documentation as the **blueprint for constructing a skyscraper**. 
 
 How does a request travel from a user's phone to our database? Here is the simple end-to-end journey:
 
-```
-    [ 📱 User Phone / Web App ]
+```text
+     [ 📱 User Phone / Web App ]
                  │
                  │ (1. HTTPS Request: "Create Tweet")
                  ▼
@@ -31,7 +31,7 @@ How does a request travel from a user's phone to our database? Here is the simpl
                  │
                  ▼
        [ 🌐 Express API Gateway ]  ──► Checks: "Is this user logged in? Is the data valid?"
-                 │
+                 │                   (Exposes /metrics for Prometheus)
                  ▼
     ┌─────────────────────────┐
     │  Modular Monolith Core  │    ──► The Brain: Handles Users, Tweets, Feeds, and Follows.
@@ -40,13 +40,17 @@ How does a request travel from a user's phone to our database? Here is the simpl
          │           └──────────────────────────────┐
          ▼                                          ▼
  [ 🐘 PostgreSQL DB ]                       [ ⚡ Redis Cache ]
-  Stores permanent data                      Stores hot home feeds & sessions
+  Stores permanent data                      Stores hot home feeds & rate limits
   (Users, Tweets, Likes)                     for instant (<5ms) loading.
          │
          │ (2. Background Event: "Tweet Created")
          ▼
  [ 📬 Apache Kafka Bus ]   ──► Asynchronously tells background workers to push notifications
                                and update followers' timelines without slowing down the app!
+                               
+──────────────────────────────────────────────────────────────────────────────────────────
+ [ 📊 Observability Stack ] ──► Prometheus scrapes metrics from the API and Databases.
+                                Grafana visualizes the data for real-time monitoring!
 ```
 
 ---

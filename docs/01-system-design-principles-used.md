@@ -102,5 +102,50 @@ To handle massive datasets efficiently, we implemented two distinct pagination p
 
 ## 6. Stateless Authentication & Horizontal Scalability
 
-- **Stateless JWT:** Authentication tokens are self-contained and cryptographically signed. API servers do not store user session state in server memory.
 - **Why This Matters:** Because servers are stateless, we can spin up 10, 50, or 100 API server instances behind a load balancer. Any server instance can process any request from any user without session affinity or synchronization bottlenecks.
+
+---
+
+## 7. Event-Driven Architecture (Asynchronous Fan-out)
+
+To handle heavy background tasks without blocking the main API response thread, we introduced an **Event-Driven Architecture** powered by Apache Kafka.
+
+### How It Works:
+- When a user likes a tweet or creates a new post, the API immediately saves to the database and returns a `201 Created` to the user in milliseconds.
+- Before returning, it emits an event (`TweetCreated`, `TweetLiked`) to the Kafka message broker.
+- Background consumer services pick up these events asynchronously to process heavy tasks, such as fanning out the tweet to millions of followers' feeds or sending push notifications.
+
+### Why We Chose Kafka:
+- **Durability:** Unlike Redis Pub/Sub, Kafka writes events to disk. If our background workers crash, Kafka remembers where they left off, ensuring zero lost notifications.
+- **Loose Coupling:** The `TweetService` doesn't know about the `NotificationService`. This allows us to add new features (e.g., sending an Email on a new follow) simply by attaching a new consumer, without touching the core logic.
+
+---
+
+## 8. High-Read Throughput Caching Strategy
+
+Social networks are heavily read-optimized (users read timelines 100x more than they post tweets). Hitting the PostgreSQL database for every feed request would cripple the system.
+
+### How It Works:
+- We use **Redis** to cache the most critical, high-read paths in the application (like user Timelines).
+- **Rate Limiting:** We also use Redis to enforce rate limits across the API. Because Redis is an in-memory data store with sub-millisecond latency, checking if a user has exceeded their request quota adds virtually zero overhead.
+
+---
+
+## 9. Comprehensive Observability & Telemetry
+
+A system isn't production-ready if you don't know how it behaves under load. We shifted the backend from a "black box" into a transparent, observable architecture.
+
+### How It Works:
+- **Node.js Metrics:** We injected Prometheus middleware (`express-prom-bundle`) into the Express pipeline, automatically tracking request throughput, latency, and error rates at `/metrics`.
+- **Infrastructure Exporters:** We attached sidecar exporters to PostgreSQL, Redis, and Kafka to translate their internal metrics into Prometheus format. We also use `cAdvisor` to monitor raw Docker container stats (CPU/Memory).
+- **Grafana:** We use Grafana to visualize all this time-series data, allowing engineers to build dashboards that proactively alert us before the system crashes.
+
+---
+
+## 10. Containerization & Reproducible Environments
+
+"It works on my machine" is unacceptable for modern software. We containerized the entire infrastructure using Docker and Docker Compose.
+
+### How It Works:
+- The Node.js API, PostgreSQL database, Redis cache, Kafka broker, and the entire Monitoring stack (Prometheus/Grafana) are defined declaratively in `docker-compose.yml`.
+- Any developer can clone the repository and run `docker compose up --build -d` to instantly spin up an exact replica of the production environment, complete with isolated networks and persistent volumes.
