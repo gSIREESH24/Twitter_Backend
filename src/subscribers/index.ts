@@ -4,7 +4,7 @@ import { prisma } from '../config/database';
 
 export async function setupSubscribers() {
     await eventBus.subscribe("tweet-liked", async (message) => {
-        logger.info(`🔔 Subscriber Notification [tweet-liked]: ${JSON.stringify(message)}`);
+        logger.info(`🔔 [Notification Service] Processing tweet-liked event...`);
         if (message.recipientId && message.actorId && message.tweetId) {
             await prisma.notification.create({
                 data: {
@@ -16,11 +16,23 @@ export async function setupSubscribers() {
             });
         }
     });
+    
+    // Multiple Independent Consumers demonstrating Kafka!
+    await eventBus.subscribe("tweet-liked", async (message) => {
+        logger.info(`📊 [Analytics Service] Incrementing like counters for analytics...`);
+    });
+
+    await eventBus.subscribe("tweet-liked", async (message) => {
+        logger.info(`🏆 [Achievements Service] Checking if user unlocked "Popular" badge...`);
+    });
+
+    await eventBus.subscribe("tweet-liked", async (message) => {
+        logger.info(`📧 [Email Service] Queuing email notification for recipient...`);
+    });
 
     await eventBus.subscribe("tweet-unliked", async (message) => {
-        logger.info(`🔔 Subscriber Notification [tweet-unliked]: ${JSON.stringify(message)}`);
+        logger.info(`🔔 [Notification Service] Scrubbing unliked notification...`);
         if (message.actorId && message.tweetId) {
-            // Best effort delete
             await prisma.notification.deleteMany({
                 where: {
                     type: "LIKE",
